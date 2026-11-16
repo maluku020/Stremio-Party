@@ -1,0 +1,9 @@
+# Render.com blueprint voor de party-server (gratis plan)
+services:
+  - type: web
+    name: party-server
+    runtime: node
+    plan: free
+    rootDir: party-server
+    buildCommand: npm install
+    startCommand: npm start

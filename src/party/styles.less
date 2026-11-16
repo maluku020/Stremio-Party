@@ -1,0 +1,202 @@
+.party-root {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 5.5rem;
+    z-index: 1000;
+    font-family: inherit;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.75rem;
+    pointer-events: none;
+
+    > * {
+        pointer-events: auto;
+    }
+}
+
+.party-button {
+    border: none;
+    border-radius: 2rem;
+    padding: 0.7rem 1.1rem;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+    background: rgba(123, 91, 245, 0.85);
+    box-shadow: 0 0.4rem 1.2rem rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+    order: 2;
+
+    &.active {
+        background: #22b365;
+    }
+
+    &:focus,
+    &:hover {
+        outline: 2px solid #fff;
+    }
+}
+
+.party-panel {
+    order: 1;
+    width: 20rem;
+    max-width: calc(100vw - 2.5rem);
+    max-height: 70vh;
+    overflow-y: auto;
+    background: #1b1b2b;
+    color: #fff;
+    border-radius: 1rem;
+    box-shadow: 0 0.6rem 2rem rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.party-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.1rem 0.5rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+
+    .close {
+        background: none;
+        border: none;
+        color: #aaa;
+        font-size: 1rem;
+        cursor: pointer;
+    }
+}
+
+.party-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 0.5rem 1.1rem 1.1rem;
+}
+
+.label {
+    font-size: 0.8rem;
+    color: #aaa;
+}
+
+.input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.6rem 0.8rem;
+    border-radius: 0.6rem;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: #11111c;
+    color: #fff;
+    font-size: 0.95rem;
+
+    &:focus {
+        outline: 2px solid #7b5bf5;
+    }
+}
+
+.row {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.primary,
+.secondary,
+.danger {
+    border: none;
+    border-radius: 0.6rem;
+    padding: 0.6rem 0.9rem;
+    font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+    color: #fff;
+
+    &:disabled {
+        opacity: 0.4;
+        cursor: default;
+    }
+
+    &:focus {
+        outline: 2px solid #fff;
+    }
+}
+
+.primary {
+    background: #7b5bf5;
+}
+
+.secondary {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.danger {
+    background: transparent;
+    color: #ff6b6b;
+    border: 1px solid rgba(255, 107, 107, 0.4);
+}
+
+.divider {
+    text-align: center;
+    font-size: 0.8rem;
+    color: #888;
+    margin: 0.3rem 0;
+}
+
+.code-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    background: #11111c;
+    border-radius: 0.8rem;
+    padding: 0.8rem;
+}
+
+.code-label {
+    font-size: 0.75rem;
+    color: #aaa;
+}
+
+.code {
+    font-size: 1.6rem;
+    font-weight: 800;
+    letter-spacing: 0.15rem;
+}
+
+.members {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+
+    li {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+}
+
+.dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: #22b365;
+}
+
+.hint {
+    font-size: 0.8rem;
+    color: #aaa;
+}
+
+.warning {
+    font-size: 0.8rem;
+    color: #ffb347;
+}
+
+.toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
