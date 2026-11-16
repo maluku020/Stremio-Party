@@ -3,7 +3,7 @@
 
 const EventEmitter = require('eventemitter3');
 
-const DEFAULT_SERVER_URL = process.env.PARTY_SERVER_URL || 'ws://localhost:8787';
+const DEFAULT_SERVER_URL = process.env.PARTY_SERVER_URL || 'wss://party-server-cvcz.onrender.com';
 
 const getServerUrl = () => {
     try {
