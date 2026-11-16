@@ -31,7 +31,7 @@ jobs:
           # GitHub: Settings → Secrets and variables → Actions → Variables
           # Naam: PARTY_SERVER_URL   Waarde: wss://jouw-party-server.onrender.com
           PARTY_SERVER_URL: ${{ vars.PARTY_SERVER_URL }}
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: build
 
