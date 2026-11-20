@@ -52,9 +52,9 @@ fun MainShell(nav: Nav, tab: Tab) {
 private fun TabContent(nav: Nav, tab: Tab) {
     when (tab) {
         Tab.HOME -> HomeScreen(nav)
-        Tab.MOVIES -> FoldersHome(nav, "movie")
-        Tab.SERIES -> FoldersHome(nav, "series")
+        Tab.DISCOVER -> DiscoverScreen(nav)
         Tab.LIBRARY -> LibraryScreen(nav)
+        Tab.CALENDAR -> CalendarScreen(nav)
         Tab.SETTINGS -> SettingsScreen(nav)
     }
 }

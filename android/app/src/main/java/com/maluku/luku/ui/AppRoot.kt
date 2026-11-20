@@ -12,8 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.maluku.luku.App
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
@@ -25,9 +25,9 @@ import com.maluku.luku.data.StreamItem
 /** De vaste onderdelen van het menu (onderaan op de telefoon, links op de tv), net als in Stremio. */
 enum class Tab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Filled.Home),
-    MOVIES("Films", Icons.Filled.PlayArrow),
-    SERIES("Series", Icons.Filled.List),
-    LIBRARY("Bibliotheek", Icons.Filled.Favorite),
+    DISCOVER("Ontdekken", Icons.Filled.Search),
+    LIBRARY("Bibliotheek", Icons.Filled.List),
+    CALENDAR("Kalender", Icons.Filled.DateRange),
     SETTINGS("Instellingen", Icons.Filled.Settings),
 }
 

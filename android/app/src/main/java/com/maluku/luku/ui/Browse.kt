@@ -8,6 +8,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -61,67 +69,104 @@ fun TopBar(nav: Nav, title: String) {
     }
 }
 
-// ======================= Bibliotheek =======================
+// ======================= Bibliotheek (zoals Stremio) =======================
+
+@Composable
+private fun posterColumns(): GridCells {
+    val w = LocalConfiguration.current.screenWidthDp
+    return if (w < 600) GridCells.Fixed(3) else GridCells.Adaptive(150.dp)
+}
 
 @Composable
 fun LibraryScreen(nav: Nav) {
     val app = App.instance
     val all by app.library.items.collectAsState()
-    var type by remember { mutableStateOf("all") }
+    var typeIdx by remember { mutableIntStateOf(0) }
+    var sort by remember { mutableIntStateOf(0) }
+    var picker by remember { mutableStateOf(false) }
+    val types = listOf("all" to "Alles", "movie" to "Films", "series" to "Series")
     LaunchedEffect(Unit) { runCatching { app.library.refresh() } }
-    val list = remember(all, type) {
-        app.library.library().filter { type == "all" || it.type == type }
+    val list = remember(all, typeIdx, sort) {
+        val t = types[typeIdx].first
+        val base = app.library.library().filter { t == "all" || it.type == t }
+        when (sort) {
+            1 -> base.sortedBy { it.name.lowercase() }
+            2 -> base.sortedByDescending { it.name.lowercase() }
+            3 -> base.filter { it.lastWatched != null }.sortedByDescending { it.lastWatched }
+            else -> base // al op "recent" gesorteerd
+        }
     }
 
     Column(Modifier.fillMaxSize()) {
         SearchBarStub(nav)
-        TopBar(nav, "Bibliotheek")
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Chip("Alles", type == "all") { type = "all" }
-            Chip("Films", type == "movie") { type = "movie" }
-            Chip("Series", type == "series") { type = "series" }
-            Chip("📅 Kalender", false) { nav.go(Screen.Calendar) }
+        Spacer(Modifier.height(6.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically, contentPadding = PaddingValues(4.dp)) {
+            item { DropButton(types[typeIdx].second, Modifier.width(150.dp)) { picker = true } }
+            item { Spacer(Modifier.width(6.dp)) }
+            items(listOf("Recent", "A-Z", "Z-A", "Bekeken").size) { i ->
+                Chip(listOf("Recent", "A-Z", "Z-A", "Bekeken")[i], sort == i) { sort = i }
+            }
         }
         Spacer(Modifier.height(14.dp))
         if (list.isEmpty()) {
-            Text(
-                "Je bibliotheek is nog leeg. Open een film of serie en druk op \"＋ Bibliotheek\".",
-                color = Z.dim,
-            )
+            Text("Je bibliotheek is nog leeg. Open een film of serie en druk op \"＋ Bibliotheek\".", color = Z.dim)
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(140.dp),
+                columns = posterColumns(),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(4.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(4.dp, 4.dp, 4.dp, 30.dp),
             ) {
-                items(list, key = { it.id }) { li -> Poster(li.preview) { nav.go(Screen.Detail(li.type, li.id)) } }
+                items(list) { li ->
+                    GridPoster(li.preview, progress = if (li.timeOffset > 0) li.progress else null) {
+                        nav.go(Screen.Detail(li.type, li.id))
+                    }
+                }
             }
         }
     }
+    if (picker) {
+        PickerDialog("Type", types.map { it.second }, typeIdx, { typeIdx = it }) { picker = false }
+    }
 }
 
-// ======================= Ontdekken =======================
+// ======================= Ontdekken (zoals Stremio) =======================
 
 @Composable
 fun DiscoverScreen(nav: Nav) {
     val app = App.instance
     val scope = rememberCoroutineScope()
-    var type by remember { mutableStateOf("movie") }
-    val catalogs = remember(type) { app.stremio.discoverCatalogs(type) }
-    var catalog by remember(type) { mutableStateOf<CatalogDef?>(catalogs.firstOrNull()) }
-    var genre by remember(catalog) { mutableStateOf<String?>(catalog?.genreExtra?.takeIf { it.required }?.options?.firstOrNull()) }
+    val wide = isTv() || LocalConfiguration.current.screenWidthDp >= 840
+    val types = listOf("movie" to "Films", "series" to "Series")
+    var typeIdx by remember { mutableIntStateOf(0) }
+    val type = types[typeIdx].first
+    val catalogs = remember(type, app.stremio.addons) { app.stremio.discoverCatalogs(type) }
+    var catIdx by remember(type) { mutableIntStateOf(0) }
+    val catalog = catalogs.getOrNull(catIdx)
+    val genreEx = catalog?.genreExtra
+    var genre by remember(catalog) { mutableStateOf(if (genreEx?.required == true) genreEx.options.firstOrNull() else null) }
     var items by remember { mutableStateOf<List<MetaPreview>?>(null) }
     var more by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
+    var picker by remember { mutableStateOf<String?>(null) }
+    var focused by remember { mutableStateOf<MetaPreview?>(null) }
+    val grid = rememberLazyGridState()
+
+    fun filters(): Map<String, String> {
+        val g = genre ?: return emptyMap()
+        return mapOf((genreEx?.name ?: "genre") to g)
+    }
 
     LaunchedEffect(catalog, genre) {
         items = null
         more = true
+        focused = null
         val c = catalog ?: run { items = emptyList(); return@LaunchedEffect }
-        val filters = genre?.let { mapOf("genre" to it) } ?: emptyMap()
-        items = runCatching { app.stremio.catalog(c, filters = filters) }.getOrDefault(emptyList())
-        more = c.supportsSkip && (items?.size ?: 0) > 0
+        val list = runCatching { app.stremio.catalog(c, filters = filters()) }.getOrDefault(emptyList())
+        items = list
+        focused = list.firstOrNull()
+        more = c.supportsSkip && list.isNotEmpty()
+        grid.scrollToItem(0)
     }
 
     fun loadMore() {
@@ -130,8 +175,7 @@ fun DiscoverScreen(nav: Nav) {
         if (loadingMore || !more) return
         loadingMore = true
         scope.launch {
-            val filters = genre?.let { mapOf("genre" to it) } ?: emptyMap()
-            val extra = runCatching { app.stremio.catalog(c, filters = filters, skip = cur.size) }.getOrDefault(emptyList())
+            val extra = runCatching { app.stremio.catalog(c, filters = filters(), skip = cur.size) }.getOrDefault(emptyList())
             val merged = (cur + extra).distinctBy { it.id }
             more = merged.size > cur.size
             items = merged
@@ -139,48 +183,134 @@ fun DiscoverScreen(nav: Nav) {
         }
     }
 
+    // Automatisch meer laden als je bijna onderaan bent (geen knop nodig)
+    LaunchedEffect(grid, items) {
+        snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
+            .collect { last -> if (last >= (items?.size ?: 0) - 9) loadMore() }
+    }
+
     Column(Modifier.fillMaxSize()) {
         SearchBarStub(nav)
-        TopBar(nav, "Ontdekken")
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Chip("Films", type == "movie") { type = "movie" }
-            Chip("Series", type == "series") { type = "series" }
-        }
-        Spacer(Modifier.height(10.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(4.dp)) {
-            items(catalogs) { c ->
-                Chip(c.name.ifBlank { c.id } + " · " + c.addonName, c == catalog) { catalog = c }
+        Spacer(Modifier.height(6.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(4.dp)) {
+            item { DropButton(types[typeIdx].second, Modifier.width(140.dp)) { picker = "type" } }
+            if (catalogs.isNotEmpty()) {
+                item { DropButton(catalog?.name?.ifBlank { catalog.id } ?: "Catalogus", Modifier.width(220.dp)) { picker = "catalog" } }
+            }
+            if (genreEx != null) {
+                item { DropButton(genre?.let { com.maluku.luku.data.Folders.genreLabel(it) } ?: "Standaard", Modifier.width(170.dp)) { picker = "genre" } }
             }
         }
-        val g = catalog?.genreExtra
-        if (g != null) {
-            Spacer(Modifier.height(8.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(4.dp)) {
-                if (!g.required) item { Chip("Alle genres", genre == null) { genre = null } }
-                items(g.options) { opt -> Chip(opt, genre == opt) { genre = opt } }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        val list = items
-        when {
-            catalogs.isEmpty() -> Text("Geen catalogi gevonden bij je add-ons.", color = Z.dim)
-            list == null -> Loading()
-            list.isEmpty() -> Text("Niets gevonden.", color = Z.dim)
-            else -> LazyVerticalGrid(
-                columns = GridCells.Adaptive(140.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(4.dp),
-            ) {
-                items(list) { m -> Poster(m) { nav.go(Screen.Detail(m.type, m.id)) } }
-                if (more) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                            LukuButton(if (loadingMore) "Laden…" else "Meer laden") { loadMore() }
+        Spacer(Modifier.height(14.dp))
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                val list = items
+                when {
+                    catalogs.isEmpty() -> Text("Geen catalogi gevonden bij je add-ons.", color = Z.dim)
+                    list == null -> Loading()
+                    list.isEmpty() -> Text("Niets gevonden.", color = Z.dim)
+                    else -> LazyVerticalGrid(
+                        state = grid,
+                        columns = posterColumns(),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        contentPadding = PaddingValues(4.dp, 4.dp, 4.dp, 30.dp),
+                    ) {
+                        items(list) { m ->
+                            GridPoster(m, onFocus = { focused = m }) { nav.go(Screen.Detail(m.type, m.id)) }
+                        }
+                        if (loadingMore) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Text("Meer laden…", color = Z.dim, modifier = Modifier.padding(16.dp))
+                            }
                         }
                     }
                 }
             }
+            if (wide) {
+                Spacer(Modifier.width(20.dp))
+                PreviewPanel(nav, focused, Modifier.width(400.dp).fillMaxHeight())
+            }
+        }
+    }
+
+    when (picker) {
+        "type" -> PickerDialog("Type", types.map { it.second }, typeIdx, { typeIdx = it }) { picker = null }
+        "catalog" -> PickerDialog(
+            "Catalogus",
+            catalogs.map { c -> c.name.ifBlank { c.id } + if (catalogs.count { it.name == c.name } > 1) " · ${c.addonName}" else "" },
+            catIdx,
+            { catIdx = it },
+        ) { picker = null }
+        "genre" -> {
+            val g = genreEx
+            if (g != null) {
+                val opts = (if (g.required) emptyList() else listOf<String?>(null)) + g.options
+                PickerDialog(
+                    "Genre",
+                    opts.map { it?.let { o -> com.maluku.luku.data.Folders.genreLabel(o) } ?: "Standaard" },
+                    opts.indexOf(genre).coerceAtLeast(0),
+                    { genre = opts[it] },
+                ) { picker = null }
+            } else picker = null
+        }
+    }
+}
+
+/** Infopaneel rechts (tv en brede schermen), zoals in Stremio. */
+@Composable
+private fun PreviewPanel(nav: Nav, item: MetaPreview?, modifier: Modifier) {
+    val app = App.instance
+    var meta by remember { mutableStateOf<com.maluku.luku.data.Meta?>(null) }
+    LaunchedEffect(item?.id) {
+        meta = null
+        val it = item ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(350) // niet bij elke stap van de afstandsbediening laden
+        meta = runCatching { app.stremio.meta(it.type, it.id) }.getOrNull()
+    }
+    Box(modifier.background(Z.panel, RoundedCornerShape(18.dp)).clip(RoundedCornerShape(18.dp))) {
+        val bg = meta?.background ?: item?.poster
+        if (bg != null) {
+            AsyncImage(model = bg, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().alpha(0.22f))
+        }
+        if (item == null) return@Box
+        Column(Modifier.fillMaxSize().padding(26.dp)) {
+            Text(item.name, color = Z.text, fontSize = 28.sp, fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(14.dp))
+            val m = meta
+            Row(horizontalArrangement = Arrangement.spacedBy(22.dp), verticalAlignment = Alignment.CenterVertically) {
+                m?.runtime?.let { Text(it, color = Z.text, fontSize = 16.sp) }
+                (m?.year ?: item.year)?.let { Text(it, color = Z.text, fontSize = 16.sp) }
+                m?.imdbRating?.let {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(it, color = Z.text, fontSize = 16.sp)
+                        Spacer(Modifier.width(6.dp))
+                        Box(Modifier.background(Color(0xFFF5C518), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp)) {
+                            Text("IMDb", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            if (m?.description != null) {
+                Text(m.description, color = Z.text, fontSize = 15.sp, maxLines = 9, overflow = TextOverflow.Ellipsis)
+            } else if (m == null) {
+                Text("Laden…", color = Z.dim)
+            }
+            if (m != null && m.genres.isNotEmpty()) {
+                Spacer(Modifier.height(18.dp))
+                Text("GENRES", color = Z.dim, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    m.genres.take(3).forEach { g ->
+                        Box(Modifier.background(Z.panel2, RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 6.dp)) {
+                            Text(com.maluku.luku.data.Folders.genreLabel(g), color = Z.text, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            LukuButton("▶  Bekijken", modifier = Modifier.fillMaxWidth()) { nav.go(Screen.Detail(item.type, item.id)) }
         }
     }
 }

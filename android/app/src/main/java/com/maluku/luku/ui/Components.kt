@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -79,7 +81,7 @@ fun LukuButton(
 }
 
 @Composable
-fun Poster(item: MetaPreview, width: Int = 130, onClick: () -> Unit) {
+fun Poster(item: MetaPreview, width: Int = 130, showTitle: Boolean = true, onClick: () -> Unit) {
     val libItems by com.maluku.luku.App.instance.library.items.collectAsState()
     val inLib = libItems.any { it.id == item.id && it.inLibrary }
     Column(Modifier.width(width.dp)) {
@@ -108,15 +110,110 @@ fun Poster(item: MetaPreview, width: Int = 130, onClick: () -> Unit) {
                 ) { Text("✓", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
             }
         }
-        Text(
-            item.name,
-            color = Z.text,
-            fontSize = 13.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 6.dp),
-        )
-        if (item.year != null) Text(item.year, color = Z.dim, fontSize = 11.sp)
+        if (showTitle) {
+            Text(
+                item.name,
+                color = Z.text,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            if (item.year != null) Text(item.year, color = Z.dim, fontSize = 11.sp)
+        }
+    }
+}
+
+/** Poster die de hele breedte van een rastervak vult (zoals in Stremio Ontdekken/Bibliotheek). */
+@Composable
+fun GridPoster(
+    item: MetaPreview,
+    progress: Float? = null,
+    onFocus: (() -> Unit)? = null,
+    onClick: () -> Unit,
+) {
+    val libItems by com.maluku.luku.App.instance.library.items.collectAsState()
+    val inLib = libItems.any { it.id == item.id && it.inLibrary }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .aspectRatio(2f / 3f)
+            .onFocusChanged { if (it.isFocused) onFocus?.invoke() }
+            .tv(RoundedCornerShape(14.dp), onClick)
+            .background(Z.panel2, RoundedCornerShape(14.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (item.poster != null) {
+            AsyncImage(model = item.poster, contentDescription = item.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        } else {
+            Text(item.name, color = Z.dim, textAlign = TextAlign.Center, modifier = Modifier.padding(8.dp))
+        }
+        if (inLib) {
+            Box(
+                Modifier.align(Alignment.TopStart).padding(10.dp).size(28.dp).background(Z.accent, RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center,
+            ) { Text("✓", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp) }
+        }
+        if (progress != null && progress > 0f) {
+            Box(
+                Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
+                    .fillMaxWidth().height(5.dp).background(Color(0x66FFFFFF), RoundedCornerShape(3.dp)),
+            ) {
+                Box(Modifier.fillMaxWidth(progress.coerceIn(0.03f, 1f)).height(5.dp).background(Color.White, RoundedCornerShape(3.dp)))
+            }
+        }
+    }
+}
+
+/** Keuzeknop met pijltje, zoals "Films ▾" bovenaan Ontdekken. */
+@Composable
+fun DropButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Row(
+        modifier
+            .tv(RoundedCornerShape(24.dp), onClick)
+            .background(Z.panel2, RoundedCornerShape(24.dp))
+            .padding(horizontal = 18.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, color = Z.text, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        Text("  ▾", color = Z.dim, fontSize = 15.sp)
+    }
+}
+
+/** Keuzelijst (zoals het onderste menu in Stremio): huidige keuze paars met ✓. */
+@Composable
+fun PickerDialog(title: String, options: List<String>, selected: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = 560.dp)
+                .background(Z.panel, RoundedCornerShape(18.dp))
+                .padding(vertical = 14.dp),
+        ) {
+            Text(title, color = Z.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp))
+            androidx.compose.foundation.lazy.LazyColumn {
+                items(options.size) { i ->
+                    val on = i == selected
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .tv(RoundedCornerShape(8.dp)) { onPick(i); onDismiss() }
+                            .padding(horizontal = 22.dp, vertical = 15.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            options[i],
+                            color = if (on) Z.accent else Z.text,
+                            fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 17.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (on) Text("✓", color = Z.accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
     }
 }
 

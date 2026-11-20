@@ -167,11 +167,6 @@ fun HomeScreen(nav: Nav) {
             error != null -> ErrorBox(error!!) { reload++ }
             catalogs.isEmpty() && continueList.isEmpty() -> Loading("Je add-ons laden…")
             else -> LazyColumn(contentPadding = PaddingValues(bottom = 40.dp)) {
-                item(key = "kalender") {
-                    Row(Modifier.padding(top = 8.dp)) {
-                        Chip("📅 Kalender: nieuwe afleveringen", false) { nav.go(Screen.Calendar) }
-                    }
-                }
                 if (continueList.isNotEmpty()) {
                     item(key = "continue") {
                         SectionTitle("Verder kijken")
@@ -237,7 +232,7 @@ fun CatalogRow(nav: Nav, c: CatalogDef) {
             Box(Modifier.height(60.dp)) { Text("Laden…", color = Z.dim) }
         } else {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(4.dp)) {
-                items(list) { m -> Poster(m) { nav.go(Screen.Detail(m.type, m.id)) } }
+                items(list) { m -> Poster(m, width = 140, showTitle = false) { nav.go(Screen.Detail(m.type, m.id)) } }
             }
         }
     }

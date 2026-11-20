@@ -69,6 +69,12 @@ object Folders {
 
     private fun dutchGenre(key: String, fallback: String): Pair<String, String> = genres[key] ?: (fallback to "🎬")
 
+    /** "Action" → "Actie" (onbekend: ongewijzigd). */
+    fun genreLabel(opt: String): String {
+        val key = genreKey(opt) ?: return opt
+        return genres[key]?.first ?: opt
+    }
+
     private fun isYear(s: String) = s.length == 4 && s.all { it.isDigit() }
 
     private fun streamingEmoji(n: String): String = when {
