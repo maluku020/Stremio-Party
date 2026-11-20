@@ -112,8 +112,26 @@ class StremioRepo(private val prefs: Prefs) {
     fun searchCatalogs(): List<CatalogDef> =
         addons.flatMap { it.catalogs }.filter { it.supportsSearch && it.type in listOf("movie", "series") }
 
-    suspend fun catalog(c: CatalogDef, search: String? = null): List<MetaPreview> {
-        val extra = if (search != null) "/search=" + enc(search) else ""
+    /** Catalogi voor Ontdekken: ook die een filter nodig hebben, als er keuzes voor zijn. */
+    fun discoverCatalogs(type: String): List<CatalogDef> =
+        addons.flatMap { it.catalogs }.filter { c ->
+            c.type == type && c.extras.filter { it.required }.all { it.name != "search" && it.options.isNotEmpty() }
+        }
+
+    suspend fun catalog(
+        c: CatalogDef,
+        search: String? = null,
+        filters: Map<String, String> = emptyMap(),
+        skip: Int = 0,
+    ): List<MetaPreview> {
+        val parts = mutableListOf<String>()
+        if (search != null) parts += "search=" + enc(search)
+        // Verplichte filters zonder keuze: eerste optie
+        val all = filters.toMutableMap()
+        for (e in c.extras) if (e.required && e.name !in all && e.name != "search" && e.options.isNotEmpty()) all[e.name] = e.options.first()
+        for ((k, v) in all) parts += k + "=" + enc(v)
+        if (skip > 0) parts += "skip=$skip"
+        val extra = if (parts.isEmpty()) "" else "/" + parts.joinToString("&")
         val json = Net.getJson("${c.base}/catalog/${c.type}/${c.id}$extra.json")
         val arr = json.optJSONArray("metas") ?: return emptyList()
         return (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.let(::parsePreview) }
@@ -156,6 +174,36 @@ class StremioRepo(private val prefs: Prefs) {
                 } ?: emptyList()
             }
         }.awaitAll().flatten()
+    }
+
+    /** Ondertitels van alle add-ons die "subtitles" aanbieden (bijv. OpenSubtitles). Nederlands eerst. */
+    suspend fun subtitles(type: String, id: String): List<SubtitleItem> = coroutineScope {
+        addons.filter { it.supports("subtitles", type, id) }.map { a ->
+            async {
+                withTimeoutOrNull(8_000) {
+                    runCatching {
+                        val json = Net.getJson("${a.base}/subtitles/$type/${id}.json")
+                        val arr = json.optJSONArray("subtitles") ?: JSONArray()
+                        (0 until arr.length()).mapNotNull { i ->
+                            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                            val url = o.str("url") ?: return@mapNotNull null
+                            SubtitleItem(url, normLang(o.optString("lang", "und")), a.name)
+                        }
+                    }.getOrNull()
+                } ?: emptyList()
+            }
+        }.awaitAll().flatten()
+            .filter { it.lang == "nl" || it.lang == "en" }
+            .sortedBy { if (it.lang == "nl") 0 else 1 }
+            .let { list -> list.filter { it.lang == "nl" }.take(3) + list.filter { it.lang == "en" }.take(2) }
+    }
+
+    val authKey: String? get() = prefs.authKey
+
+    private fun normLang(l: String): String = when (l.lowercase()) {
+        "dut", "nld", "nl", "dutch", "nederlands" -> "nl"
+        "eng", "en", "english" -> "en"
+        else -> l.lowercase()
     }
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")

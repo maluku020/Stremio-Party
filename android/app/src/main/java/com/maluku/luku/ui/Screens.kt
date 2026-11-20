@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maluku.luku.App
 import com.maluku.luku.data.CatalogDef
+import com.maluku.luku.data.LibItem
 import com.maluku.luku.data.MetaPreview
 import kotlinx.coroutines.launch
 
@@ -145,6 +147,8 @@ fun HomeScreen(nav: Nav) {
     var catalogs by remember { mutableStateOf(app.stremio.homeCatalogs()) }
     var error by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableIntStateOf(0) }
+    val libItems by app.library.items.collectAsState()
+    val continueList = remember(libItems) { app.library.continueWatching() }
 
     LaunchedEffect(reload) {
         try {
@@ -155,6 +159,7 @@ fun HomeScreen(nav: Nav) {
             if (catalogs.isEmpty()) error = e.message
         }
     }
+    LaunchedEffect(Unit) { runCatching { app.library.refresh() } }
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -163,17 +168,58 @@ fun HomeScreen(nav: Nav) {
         ) {
             Brand()
             Spacer(Modifier.weight(1f))
-            LukuButton("🔍 Zoeken", primary = false) { nav.go(Screen.Search) }
-            Spacer(Modifier.width(10.dp))
-            LukuButton("⚙️", primary = false) { nav.go(Screen.Settings) }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(4.dp)) {
+                item { LukuButton("🧭 Ontdekken", primary = false) { nav.go(Screen.Discover) } }
+                item { LukuButton("📚 Bibliotheek", primary = false) { nav.go(Screen.Library) } }
+                item { LukuButton("📅 Kalender", primary = false) { nav.go(Screen.Calendar) } }
+                item { LukuButton("🔍 Zoeken", primary = false) { nav.go(Screen.Search) } }
+                item { LukuButton("⚙️", primary = false) { nav.go(Screen.Settings) } }
+            }
         }
         when {
             error != null -> ErrorBox(error!!) { reload++ }
-            catalogs.isEmpty() -> Loading("Je add-ons laden…")
+            catalogs.isEmpty() && continueList.isEmpty() -> Loading("Je add-ons laden…")
             else -> LazyColumn(contentPadding = PaddingValues(bottom = 40.dp)) {
-                items(catalogs, key = { it.base + it.type + it.id }) { c -> CatalogRow(nav, c) }
+                if (continueList.isNotEmpty()) {
+                    item(key = "continue") {
+                        SectionTitle("Verder kijken")
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(4.dp)) {
+                            items(continueList, key = { it.id }) { li ->
+                                ContinueCard(li) { nav.go(Screen.Detail(li.type, li.id)) }
+                            }
+                        }
+                    }
+                }
+                items(catalogs) { c -> CatalogRow(nav, c) }
             }
         }
+    }
+}
+
+@Composable
+fun ContinueCard(li: LibItem, onClick: () -> Unit) {
+    Column(Modifier.width(130.dp)) {
+        Box(
+            Modifier
+                .tv(RoundedCornerShape(10.dp), onClick)
+                .width(130.dp)
+                .height(195.dp)
+                .background(Z.panel2, RoundedCornerShape(10.dp)),
+        ) {
+            if (li.poster != null) {
+                coil.compose.AsyncImage(
+                    model = li.poster,
+                    contentDescription = li.name,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(5.dp).background(Z.panel2))
+            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(li.progress.coerceAtLeast(0.03f)).height(5.dp).background(Z.accent))
+        }
+        Text(li.name, color = Z.text, fontSize = 13.sp, maxLines = 1, modifier = Modifier.padding(top = 6.dp))
+        val ep = li.videoId?.split(":")?.takeIf { it.size >= 3 }?.let { "S${it[1]}E${it[2]}" }
+        if (ep != null) Text(ep, color = Z.dim, fontSize = 11.sp)
     }
 }
 
@@ -192,7 +238,7 @@ fun CatalogRow(nav: Nav, c: CatalogDef) {
             Box(Modifier.height(60.dp)) { Text("Laden…", color = Z.dim) }
         } else {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(4.dp)) {
-                items(list, key = { it.id }) { m -> Poster(m) { nav.go(Screen.Detail(m.type, m.id)) } }
+                items(list) { m -> Poster(m) { nav.go(Screen.Detail(m.type, m.id)) } }
             }
         }
     }
@@ -249,7 +295,7 @@ fun SearchScreen(nav: Nav) {
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(4.dp),
             ) {
-                items(r, key = { it.type + it.id }) { m -> Poster(m) { nav.go(Screen.Detail(m.type, m.id)) } }
+                items(r) { m -> Poster(m) { nav.go(Screen.Detail(m.type, m.id)) } }
             }
         }
     }

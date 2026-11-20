@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +38,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.maluku.luku.App
 import com.maluku.luku.data.Meta
+import com.maluku.luku.data.MetaPreview
+import com.maluku.luku.data.PlayInfo
 import com.maluku.luku.data.StreamItem
 
 // ======================= Film / serie =======================
@@ -65,10 +68,27 @@ fun DetailScreen(nav: Nav, type: String, id: String) {
     }
 }
 
+fun formatTime(ms: Long): String {
+    val t = ms / 1000
+    val h = t / 3600
+    val mnt = (t % 3600) / 60
+    val sec = t % 60
+    return if (h > 0) String.format("%d:%02d:%02d", h, mnt, sec) else String.format("%d:%02d", mnt, sec)
+}
+
 @Composable
 private fun DetailContent(nav: Nav, m: Meta) {
+    val app = App.instance
     val isSeries = m.type == "series" && m.videos.isNotEmpty()
-    var season by remember(m.id) { mutableIntStateOf(m.seasons.firstOrNull { it > 0 } ?: m.seasons.firstOrNull() ?: 1) }
+    val libItems by app.library.items.collectAsState()
+    val lib = libItems.firstOrNull { it.id == m.id }
+    val episodes = remember(m.id) {
+        m.videos.filter { it.season > 0 }.ifEmpty { m.videos }.map { it.id to "${m.name} · ${it.label}" }
+    }
+    fun infoFor(videoId: String, label: String) = PlayInfo(m.type, m.id, videoId, m.name, m.poster, label, episodes)
+    // Seizoen van de laatst gekeken aflevering openen
+    val lastSeason = lib?.videoId?.let { vid -> m.videos.firstOrNull { it.id == vid }?.season }
+    var season by remember(m.id) { mutableIntStateOf(lastSeason ?: m.seasons.firstOrNull { it > 0 } ?: m.seasons.firstOrNull() ?: 1) }
 
     Box(Modifier.fillMaxSize()) {
         if (m.background != null) {
@@ -102,10 +122,31 @@ private fun DetailContent(nav: Nav, m: Meta) {
                             Text("Met: " + m.cast.take(5).joinToString(", "), color = Z.dim, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
                         }
                         Spacer(Modifier.height(16.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            LukuButton("←  Terug", primary = false) { nav.back() }
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(4.dp)) {
+                            item { LukuButton("←  Terug", primary = false) { nav.back() } }
                             if (!isSeries) {
-                                LukuButton("▶  Bronnen zoeken") { nav.go(Screen.Streams(m.type, m.id, m.name)) }
+                                val resume = lib?.let { app.library.resumeFor(m.id, m.id) } ?: 0L
+                                item {
+                                    LukuButton(if (resume > 1000) "▶  Verder kijken (${formatTime(resume)})" else "▶  Bronnen zoeken") {
+                                        nav.go(Screen.Streams(infoFor(m.id, m.name)))
+                                    }
+                                }
+                            } else {
+                                val vid = lib?.videoId
+                                val v = m.videos.firstOrNull { it.id == vid }
+                                if (v != null) {
+                                    item {
+                                        LukuButton("▶  Verder: S${v.season}E${v.episode}") {
+                                            nav.go(Screen.Streams(infoFor(v.id, "${m.name} · ${v.label}")))
+                                        }
+                                    }
+                                }
+                            }
+                            item {
+                                val inLib = lib?.inLibrary == true
+                                LukuButton(if (inLib) "✓  In bibliotheek" else "＋  Bibliotheek", primary = false) {
+                                    app.library.toggleLibrary(MetaPreview(m.id, m.type, m.name, m.poster, m.year))
+                                }
                             }
                         }
                     }
@@ -121,12 +162,12 @@ private fun DetailContent(nav: Nav, m: Meta) {
                     }
                     Spacer(Modifier.height(10.dp))
                 }
-                items(m.videos.filter { it.season == season }, key = { it.id }) { v ->
+                items(m.videos.filter { it.season == season }) { v ->
                     Row(
                         Modifier
                             .fillMaxWidth()
                             .padding(vertical = 5.dp)
-                            .tv { nav.go(Screen.Streams("series", v.id, "${m.name} · S${v.season}E${v.episode} · ${v.title}")) }
+                            .tv { nav.go(Screen.Streams(infoFor(v.id, "${m.name} · ${v.label}"))) }
                             .background(Z.panel, RoundedCornerShape(10.dp))
                             .padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -151,7 +192,10 @@ private fun DetailContent(nav: Nav, m: Meta) {
 // ======================= Bronnen =======================
 
 @Composable
-fun StreamsScreen(nav: Nav, type: String, id: String, title: String) {
+fun StreamsScreen(nav: Nav, info: PlayInfo) {
+    val type = info.type
+    val id = info.videoId
+    val title = info.label
     val app = App.instance
     var streams by remember(id) { mutableStateOf<List<StreamItem>?>(null) }
     var retry by remember { mutableIntStateOf(0) }
@@ -180,7 +224,7 @@ fun StreamsScreen(nav: Nav, type: String, id: String, title: String) {
             else -> {
                 val free = app.torrents.freeBytes()
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
-                    items(list) { s -> StreamRow(s, free) { nav.go(Screen.Player(s, title)) } }
+                    items(list) { s -> StreamRow(s, free) { nav.go(Screen.Player(s, info)) } }
                 }
             }
         }

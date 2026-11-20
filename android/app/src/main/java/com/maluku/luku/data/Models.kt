@@ -6,6 +6,9 @@ import org.json.JSONObject
 /** Eén resource uit een add-on-manifest, bijv. "stream" voor ["movie","series"] met idPrefixes ["tt"]. */
 data class Resource(val name: String, val types: List<String>?, val idPrefixes: List<String>?)
 
+/** Een filter van een catalogus, bijv. genre met opties ["Action","Comedy",...]. */
+data class ExtraDef(val name: String, val options: List<String>, val required: Boolean)
+
 /** Een catalogus die de app als rij kan tonen. */
 data class CatalogDef(
     val addonName: String,
@@ -15,7 +18,11 @@ data class CatalogDef(
     val name: String,
     val needsExtra: Boolean,
     val supportsSearch: Boolean,
+    val extras: List<ExtraDef> = emptyList(),
 ) {
+    val genreExtra: ExtraDef? get() = extras.firstOrNull { it.name == "genre" && it.options.isNotEmpty() }
+    val supportsSkip: Boolean get() = extras.any { it.name == "skip" }
+
     val title: String get() = if (name.isNotBlank()) "$name · ${typeLabel(type)}" else typeLabel(type)
 }
 
@@ -54,7 +61,33 @@ data class Video(
     val season: Int,
     val episode: Int,
     val thumbnail: String?,
-)
+    val released: String? = null,
+) {
+    val label: String get() = if (season > 0) "S${season}E$episode · $title" else title
+}
+
+/** Een ondertitel van een add-on (bijv. OpenSubtitles). */
+data class SubtitleItem(val url: String, val lang: String, val addonName: String)
+
+/**
+ * Alles wat de speler moet weten over wat er speelt:
+ * welke film/serie, welke aflevering, en welke afleveringen daarna komen.
+ */
+data class PlayInfo(
+    val type: String,
+    val metaId: String,
+    val videoId: String,
+    val name: String,
+    val poster: String?,
+    val label: String,
+    val episodes: List<Pair<String, String>> = emptyList(), // (videoId, label) op volgorde
+) {
+    val next: Pair<String, String>?
+        get() {
+            val i = episodes.indexOfFirst { it.first == videoId }
+            return if (i >= 0 && i + 1 < episodes.size) episodes[i + 1] else null
+        }
+}
 
 data class Meta(
     val id: String,
@@ -144,15 +177,22 @@ fun parseManifest(transportUrl: String, m: JSONObject): Addon {
     m.optJSONArray("catalogs")?.let { arr ->
         for (i in 0 until arr.length()) {
             val c = arr.optJSONObject(i) ?: continue
-            var needsExtra = c.optJSONArray("extraRequired")?.length()?.let { it > 0 } ?: false
+            val requiredNames = c.optJSONArray("extraRequired").strings().toMutableSet()
             var search = c.optJSONArray("extraSupported").strings().contains("search")
+            val extras = mutableListOf<ExtraDef>()
             c.optJSONArray("extra")?.let { ex ->
                 for (j in 0 until ex.length()) {
                     val e = ex.optJSONObject(j) ?: continue
-                    if (e.optString("name") == "search") search = true
-                    if (e.optBoolean("isRequired", false)) needsExtra = true
+                    val en = e.optString("name")
+                    if (en == "search") search = true
+                    if (e.optBoolean("isRequired", false)) requiredNames += en
+                    extras += ExtraDef(en, e.optJSONArray("options").strings(), e.optBoolean("isRequired", false))
                 }
             }
+            for (en in c.optJSONArray("extraSupported").strings()) {
+                if (extras.none { it.name == en }) extras += ExtraDef(en, emptyList(), en in requiredNames)
+            }
+            val needsExtra = requiredNames.isNotEmpty()
             catalogs += CatalogDef(
                 addonName = name,
                 base = base,
@@ -161,6 +201,7 @@ fun parseManifest(transportUrl: String, m: JSONObject): Addon {
                 name = c.optString("name", ""),
                 needsExtra = needsExtra,
                 supportsSearch = search,
+                extras = extras,
             )
         }
     }
@@ -190,6 +231,7 @@ fun parseMeta(o: JSONObject): Meta {
                 season = v.optInt("season", 0),
                 episode = v.optInt("episode", v.optInt("number", 0)),
                 thumbnail = v.str("thumbnail"),
+                released = v.str("released") ?: v.str("firstAired"),
             )
         }
     }
