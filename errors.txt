@@ -1,0 +1,3 @@
+48:e: file:///home/runner/work/Stremio-Party/Stremio-Party/android/app/src/main/java/com/maluku/luku/torrent/TorrentEngine.kt:72:77 Argument type mismatch: actual type is 'String', but 'sha1_hash!' was expected.
+53:FAILURE: Build failed with an exception.
+55:* What went wrong:
