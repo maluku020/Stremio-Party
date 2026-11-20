@@ -12,11 +12,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.maluku.luku.App
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.maluku.luku.data.CatalogDef
 import com.maluku.luku.data.PlayInfo
@@ -25,9 +25,9 @@ import com.maluku.luku.data.StreamItem
 /** De vaste onderdelen van het menu (onderaan op de telefoon, links op de tv), net als in Stremio. */
 enum class Tab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Filled.Home),
-    DISCOVER("Ontdekken", Icons.Filled.Star),
-    LIBRARY("Bibliotheek", Icons.Filled.List),
-    ADDONS("Add-ons", Icons.Filled.Build),
+    MOVIES("Films", Icons.Filled.PlayArrow),
+    SERIES("Series", Icons.Filled.List),
+    LIBRARY("Bibliotheek", Icons.Filled.Favorite),
     SETTINGS("Instellingen", Icons.Filled.Settings),
 }
 
@@ -36,7 +36,14 @@ sealed class Screen {
     data class Main(val tab: Tab = Tab.HOME) : Screen()
     data object Search : Screen()
     data object Calendar : Screen()
-    data class CatalogAll(val catalog: CatalogDef) : Screen()
+    data object Addons : Screen()
+    data object Discover : Screen()
+    data class Folder(val type: String, val folderId: String) : Screen()
+    data class CatalogAll(
+        val catalog: CatalogDef,
+        val filters: Map<String, String> = emptyMap(),
+        val title: String? = null,
+    ) : Screen()
     data class Detail(val type: String, val id: String) : Screen()
     data class Streams(val info: PlayInfo) : Screen()
     data class Player(val stream: StreamItem, val info: PlayInfo) : Screen()
@@ -74,7 +81,10 @@ fun AppRoot() {
                 is Screen.Main -> MainShell(nav, screen.tab)
                 Screen.Search -> SearchScreen(nav)
                 Screen.Calendar -> CalendarScreen(nav)
-                is Screen.CatalogAll -> CatalogAllScreen(nav, screen.catalog)
+                Screen.Addons -> AddonsScreen(nav)
+                Screen.Discover -> DiscoverScreen(nav)
+                is Screen.Folder -> FolderScreen(nav, screen.type, screen.folderId)
+                is Screen.CatalogAll -> CatalogAllScreen(nav, screen.catalog, screen.filters, screen.title)
                 is Screen.Detail -> DetailScreen(nav, screen.type, screen.id)
                 is Screen.Streams -> StreamsScreen(nav, screen.info)
                 is Screen.Player -> PlayerScreen(nav, screen.stream, screen.info)

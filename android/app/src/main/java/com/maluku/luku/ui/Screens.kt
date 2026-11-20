@@ -395,6 +395,12 @@ fun SettingsScreen(nav: Nav) {
             }
         }
         item {
+            SectionTitle("Add-ons")
+            Text("${app.stremio.addons.size} add-ons uit je Stremio-account", color = Z.dim, fontSize = 13.sp)
+            Spacer(Modifier.height(8.dp))
+            LukuButton("🧩  Add-ons beheren", primary = false) { nav.go(Screen.Addons) }
+        }
+        item {
             SectionTitle("Opslag")
             Text(
                 "Vrij op dit apparaat: " + String.format("%.1f GB", app.torrents.freeBytes() / 1e9) +

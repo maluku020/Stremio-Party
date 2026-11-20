@@ -284,15 +284,15 @@ private fun startOfDay(t: Long): Long = Calendar.getInstance().apply {
 // ======================= Alles zien (één catalogus) =======================
 
 @Composable
-fun CatalogAllScreen(nav: Nav, c: CatalogDef) {
+fun CatalogAllScreen(nav: Nav, c: CatalogDef, filters: Map<String, String> = emptyMap(), title: String? = null) {
     val app = App.instance
     val scope = rememberCoroutineScope()
     var items by remember(c) { mutableStateOf<List<MetaPreview>?>(null) }
     var more by remember(c) { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
 
-    LaunchedEffect(c) {
-        val list = runCatching { app.stremio.catalog(c) }.getOrDefault(emptyList())
+    LaunchedEffect(c, filters) {
+        val list = runCatching { app.stremio.catalog(c, filters = filters) }.getOrDefault(emptyList())
         items = list
         more = c.supportsSkip && list.isNotEmpty()
     }
@@ -302,7 +302,7 @@ fun CatalogAllScreen(nav: Nav, c: CatalogDef) {
         if (loadingMore || !more) return
         loadingMore = true
         scope.launch {
-            val extra = runCatching { app.stremio.catalog(c, skip = cur.size) }.getOrDefault(emptyList())
+            val extra = runCatching { app.stremio.catalog(c, filters = filters, skip = cur.size) }.getOrDefault(emptyList())
             val merged = (cur + extra).distinctBy { it.id }
             more = merged.size > cur.size
             items = merged
@@ -311,7 +311,7 @@ fun CatalogAllScreen(nav: Nav, c: CatalogDef) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        TopBar(nav, c.title)
+        TopBar(nav, title ?: c.title)
         val list = items
         when {
             list == null -> Loading()
@@ -328,6 +328,88 @@ fun CatalogAllScreen(nav: Nav, c: CatalogDef) {
                         Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                             LukuButton(if (loadingMore) "Laden…" else "Meer laden") { loadMore() }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+// ======================= Mappen (Films / Series) =======================
+
+@Composable
+private fun FolderTile(emoji: String, title: String, subtitle: String?, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .tv(RoundedCornerShape(12.dp), onClick)
+            .background(Z.panel, RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(emoji, fontSize = 26.sp)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Z.text, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (subtitle != null) Text(subtitle, color = Z.dim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text("›", color = Z.dim, fontSize = 24.sp)
+    }
+}
+
+/** Tab Films of Series: hoofdmappen. */
+@Composable
+fun FoldersHome(nav: Nav, type: String) {
+    val app = App.instance
+    val folders = remember(type, app.stremio.addons) { com.maluku.luku.data.Folders.build(app.stremio, type) }
+    Column(Modifier.fillMaxSize()) {
+        SearchBarStub(nav)
+        TopBar(nav, if (type == "movie") "Films" else "Series")
+        if (folders.isEmpty()) {
+            Text("Nog geen catalogi gevonden. Controleer je add-ons in Instellingen.", color = Z.dim)
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(280.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(4.dp),
+            ) {
+                items(folders) { f ->
+                    FolderTile(f.emoji, f.title, "${f.entries.size} " + if (f.entries.size == 1) "lijst" else "lijsten") {
+                        nav.go(Screen.Folder(type, f.id))
+                    }
+                }
+                item {
+                    FolderTile("🧭", "Zelf filteren", "Catalogus en genre kiezen") { nav.go(Screen.Discover) }
+                }
+            }
+        }
+    }
+}
+
+/** Inhoud van één map: de lijsten (catalogi of genres). */
+@Composable
+fun FolderScreen(nav: Nav, type: String, folderId: String) {
+    val app = App.instance
+    val folder = remember(type, folderId) {
+        com.maluku.luku.data.Folders.build(app.stremio, type).firstOrNull { it.id == folderId }
+    }
+    Column(Modifier.fillMaxSize()) {
+        TopBar(nav, folder?.let { "${it.emoji}  ${it.title}" } ?: "Map")
+        if (folder == null) {
+            Text("Deze map is leeg.", color = Z.dim)
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(240.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(4.dp),
+            ) {
+                items(folder.entries) { e ->
+                    val sub = if (e.filters.isEmpty()) e.catalog.addonName else e.catalog.name.ifBlank { e.catalog.addonName }
+                    FolderTile(e.emoji, e.title, sub) {
+                        nav.go(Screen.CatalogAll(e.catalog, e.filters, "${e.emoji}  ${e.title}"))
                     }
                 }
             }
