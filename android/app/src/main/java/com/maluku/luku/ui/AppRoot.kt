@@ -70,7 +70,7 @@ fun AppRoot() {
         val screen = nav.current
         // Op een tv een rand vrijlaten, anders valt de tekst buiten beeld (overscan)
         val pad = when {
-            screen is Screen.Player -> Modifier
+            screen is Screen.Player || screen is Screen.Detail -> Modifier
             tv -> Modifier.padding(horizontal = 48.dp, vertical = 27.dp)
             screen is Screen.Main -> Modifier
             else -> Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
