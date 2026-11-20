@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Voorgrond van het app-icoon: wit hoekig M met een paarse play-driehoek -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M30,74 L30,34 L42,34 L54,52 L66,34 L78,34 L78,74 L68,74 L68,50 L56,67 L52,67 L40,50 L40,74 Z" />
+    <path
+        android:fillColor="#FF7C5CFF"
+        android:pathData="M48,76 L48,90 L60,83 Z" />
+</vector>

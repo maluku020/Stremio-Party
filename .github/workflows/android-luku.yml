@@ -1,0 +1,67 @@
+name: Teyfey Luku APK
+
+on:
+  push:
+    branches: [development, main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-luku.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-luku
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.14.3
+
+      - name: Bouw APK
+        id: build
+        working-directory: android
+        run: |
+          set -o pipefail
+          gradle assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: Hernoem APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk TeyfeyLuku.apk
+
+      - name: Zet APK online (vaste downloadlink)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: luku-v${{ github.run_number }}
+          name: Teyfey Luku ${{ github.run_number }}
+          make_latest: true
+          files: TeyfeyLuku.apk
+          body: |
+            Teyfey Luku – build ${{ github.run_number }}
+            Downloader-link: https://github.com/${{ github.repository }}/releases/latest/download/TeyfeyLuku.apk
+
+      # Bij een fout: het bouwlog terugzetten op de branch ci-log, zodat Claude het kan lezen
+      - name: Bouwlog bewaren bij fout
+        if: failure()
+        run: |
+          mkdir -p /tmp/log && cp android/build.log /tmp/log/build.log 2>/dev/null || echo "geen log" > /tmp/log/build.log
+          grep -nE "^e: |error:|FAILURE|What went wrong|Could not" /tmp/log/build.log | head -150 > /tmp/log/errors.txt || true
+          cd /tmp/log
+          git init -q
+          git config user.name "ci"
+          git config user.email "ci@users.noreply.github.com"
+          git checkout -q -b ci-log
+          git add -A
+          git commit -qm "Bouwlog run ${{ github.run_number }}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ci-log

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- TV-banner (320x180): donker vlak met wit M-logo en paarse balk -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path android:fillColor="#FF0B0E13" android:pathData="M0,0 L320,0 L320,180 L0,180 Z" />
+    <path android:fillColor="#FF7C5CFF" android:pathData="M0,150 L320,150 L320,180 L0,180 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M120,125 L120,45 L144,45 L160,72 L176,45 L200,45 L200,125 L180,125 L180,82 L164,106 L156,106 L140,82 L140,125 Z" />
+</vector>
