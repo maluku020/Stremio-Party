@@ -51,6 +51,8 @@ fun PlayerScreen(nav: Nav, stream: StreamItem, info: PlayInfo) {
     var torrent by remember { mutableStateOf<TorrentStream?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var showNext by remember { mutableStateOf(false) }
+    var debug by remember { mutableStateOf("") }
+    var stage by remember { mutableStateOf("start") }
     var nextBusy by remember { mutableStateOf(false) }
     val next = info.next
 
@@ -125,7 +127,9 @@ fun PlayerScreen(nav: Nav, stream: StreamItem, info: PlayInfo) {
                 torrent = t
             }
             status = "Bufferen…"
+            stage = "ondertitels ophalen"
             val subs = subsJob.await()
+            stage = "speler gestart (${subs.size} ondertitels)"
             Players.play(player, t, stream.url, subs, resume)
             if (resume > 0) notice = "Verder vanaf " + formatTime(resume)
             if (subs.any { it.lang == "nl" }) notice = (notice?.let { "$it · " } ?: "") + "Nederlandse ondertitels gevonden"
@@ -138,7 +142,9 @@ fun PlayerScreen(nav: Nav, stream: StreamItem, info: PlayInfo) {
     LaunchedEffect(torrent) {
         var tick = 0
         while (true) {
-            torrent?.let { status = it.stats() }
+            torrent?.let { status = it.stats(); debug = it.debug() }
+            val st = when (player.playbackState) { Player.STATE_IDLE -> "IDLE"; Player.STATE_BUFFERING -> "BUFFERING"; Player.STATE_READY -> "READY"; else -> "ENDED" }
+            debug = "Fase: $stage · speler $st · ${player.currentPosition / 1000}s\n" + (torrent?.debug() ?: "gewone link")
             val dur = player.duration
             showNext = next != null && dur != C.TIME_UNSET && dur > 0 && dur - player.currentPosition < 90_000
             if (tick % 15 == 14) {
@@ -184,6 +190,13 @@ fun PlayerScreen(nav: Nav, stream: StreamItem, info: PlayInfo) {
             }
         } else if (buffering) {
             InfoBox(Modifier.align(Alignment.TopStart), info.label, status)
+            Text(
+                debug,
+                color = Color(0xFFB0B0B0),
+                fontSize = 11.sp,
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, end = 16.dp, bottom = 140.dp)
+                    .background(Color(0xAA000000), RoundedCornerShape(6.dp)).padding(8.dp),
+            )
         } else if (notice != null) {
             InfoBox(Modifier.align(Alignment.TopStart), info.label, notice!!)
         }

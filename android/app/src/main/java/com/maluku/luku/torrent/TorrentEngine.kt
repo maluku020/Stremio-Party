@@ -147,6 +147,12 @@ class TorrentStream(
     private var raf: RandomAccessFile? = null
     private var lastPiece = -1
 
+    // Meetgegevens voor op het scherm (om problemen te vinden)
+    @Volatile var dbgReads = 0
+    @Volatile var dbgPos = -1L
+    @Volatile var dbgWaitPiece = -1
+    @Volatile var dbgLast = "nog niet gelezen"
+
     private fun pieceAt(pos: Long): Int = ((fileOffset + pos) / pieceLength).toInt().coerceIn(0, numPieces - 1)
 
     /** Geeft de stukken vanaf [pos] voorrang (de speler heeft ze zo nodig). */
@@ -169,7 +175,9 @@ class TorrentStream(
 
     /** Leest bytes; wacht tot het benodigde stuk binnen is. Geeft -1 aan het eind. */
     fun read(pos: Long, buf: ByteArray, off: Int, len: Int): Int {
-        if (pos >= size) return -1
+        dbgReads++
+        dbgPos = pos
+        if (pos >= size) { dbgLast = "einde bestand"; return -1 }
         val piece = pieceAt(pos)
         if (piece != lastPiece) {
             // Echt gesprongen (spoelen)? Oude voorrang wissen. Begin/eind van het bestand lezen is geen spoelen.
@@ -179,6 +187,7 @@ class TorrentStream(
             lastPiece = piece
         }
         var waited = 0
+        dbgWaitPiece = piece
         while (!handle.havePiece(piece)) {
             if (closed) throw IOException("Gestopt")
             if (waited > 180_000) throw IOException("Te traag: na 3 minuten nog niets binnen")
@@ -195,7 +204,16 @@ class TorrentStream(
             RandomAccessFile(file, "r").also { raf = it }
         }
         r.seek(pos)
-        return r.read(buf, off, n)
+        val got = r.read(buf, off, n)
+        dbgWaitPiece = -1
+        dbgLast = "gelezen $got (bestand ${r.length() / 1_000_000} MB op schijf)"
+        return got
+    }
+
+    fun debug(): String {
+        val wait = if (dbgWaitPiece >= 0) "wacht op stuk $dbgWaitPiece (heb: ${runCatching { handle.havePiece(dbgWaitPiece) }.getOrDefault(false)})" else "niet aan het wachten"
+        return "Lezen: ${dbgReads}× · plek ${dbgPos / 1_000_000} MB van ${size / 1_000_000} MB · $wait · $dbgLast · " +
+            "stuk ${pieceLength / 1024} KB, eerste stuk ${pieceAt(0)}, laatste ${pieceAt(size - 1)}"
     }
 
     fun stats(): String = runCatching {
