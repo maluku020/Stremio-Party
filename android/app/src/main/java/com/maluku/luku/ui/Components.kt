@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,6 +80,8 @@ fun LukuButton(
 
 @Composable
 fun Poster(item: MetaPreview, width: Int = 130, onClick: () -> Unit) {
+    val libItems by com.maluku.luku.App.instance.library.items.collectAsState()
+    val inLib = libItems.any { it.id == item.id && it.inLibrary }
     Column(Modifier.width(width.dp)) {
         Box(
             Modifier
@@ -97,6 +100,12 @@ fun Poster(item: MetaPreview, width: Int = 130, onClick: () -> Unit) {
                 )
             } else {
                 Text(item.name, color = Z.dim, textAlign = TextAlign.Center, modifier = Modifier.padding(8.dp))
+            }
+            if (inLib) {
+                Box(
+                    Modifier.align(Alignment.TopStart).padding(8.dp).size(26.dp).background(Z.accent, RoundedCornerShape(13.dp)),
+                    contentAlignment = Alignment.Center,
+                ) { Text("✓", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
             }
         }
         Text(

@@ -51,10 +51,12 @@ import java.util.Locale
 import java.util.TimeZone
 
 @Composable
-private fun TopBar(nav: Nav, title: String) {
+fun TopBar(nav: Nav, title: String) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
-        LukuButton("←", primary = false) { nav.back() }
-        Spacer(Modifier.width(12.dp))
+        if (nav.stack.size > 1) {
+            LukuButton("←", primary = false) { nav.back() }
+            Spacer(Modifier.width(12.dp))
+        }
         Text(title, color = Z.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
     }
 }
@@ -72,11 +74,13 @@ fun LibraryScreen(nav: Nav) {
     }
 
     Column(Modifier.fillMaxSize()) {
+        SearchBarStub(nav)
         TopBar(nav, "Bibliotheek")
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Chip("Alles", type == "all") { type = "all" }
             Chip("Films", type == "movie") { type = "movie" }
             Chip("Series", type == "series") { type = "series" }
+            Chip("📅 Kalender", false) { nav.go(Screen.Calendar) }
         }
         Spacer(Modifier.height(14.dp))
         if (list.isEmpty()) {
@@ -136,6 +140,7 @@ fun DiscoverScreen(nav: Nav) {
     }
 
     Column(Modifier.fillMaxSize()) {
+        SearchBarStub(nav)
         TopBar(nav, "Ontdekken")
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Chip("Films", type == "movie") { type = "movie" }
@@ -274,3 +279,58 @@ private fun startOfDay(t: Long): Long = Calendar.getInstance().apply {
     set(Calendar.SECOND, 0)
     set(Calendar.MILLISECOND, 0)
 }.timeInMillis
+
+
+// ======================= Alles zien (één catalogus) =======================
+
+@Composable
+fun CatalogAllScreen(nav: Nav, c: CatalogDef) {
+    val app = App.instance
+    val scope = rememberCoroutineScope()
+    var items by remember(c) { mutableStateOf<List<MetaPreview>?>(null) }
+    var more by remember(c) { mutableStateOf(true) }
+    var loadingMore by remember { mutableStateOf(false) }
+
+    LaunchedEffect(c) {
+        val list = runCatching { app.stremio.catalog(c) }.getOrDefault(emptyList())
+        items = list
+        more = c.supportsSkip && list.isNotEmpty()
+    }
+
+    fun loadMore() {
+        val cur = items ?: return
+        if (loadingMore || !more) return
+        loadingMore = true
+        scope.launch {
+            val extra = runCatching { app.stremio.catalog(c, skip = cur.size) }.getOrDefault(emptyList())
+            val merged = (cur + extra).distinctBy { it.id }
+            more = merged.size > cur.size
+            items = merged
+            loadingMore = false
+        }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        TopBar(nav, c.title)
+        val list = items
+        when {
+            list == null -> Loading()
+            list.isEmpty() -> Text("Niets gevonden.", color = Z.dim)
+            else -> LazyVerticalGrid(
+                columns = GridCells.Adaptive(140.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(4.dp),
+            ) {
+                items(list) { m -> Poster(m) { nav.go(Screen.Detail(m.type, m.id)) } }
+                if (more) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                            LukuButton(if (loadingMore) "Laden…" else "Meer laden") { loadMore() }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

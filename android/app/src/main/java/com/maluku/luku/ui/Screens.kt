@@ -162,24 +162,16 @@ fun HomeScreen(nav: Nav) {
     LaunchedEffect(Unit) { runCatching { app.library.refresh() } }
 
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Brand()
-            Spacer(Modifier.weight(1f))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(4.dp)) {
-                item { LukuButton("🧭 Ontdekken", primary = false) { nav.go(Screen.Discover) } }
-                item { LukuButton("📚 Bibliotheek", primary = false) { nav.go(Screen.Library) } }
-                item { LukuButton("📅 Kalender", primary = false) { nav.go(Screen.Calendar) } }
-                item { LukuButton("🔍 Zoeken", primary = false) { nav.go(Screen.Search) } }
-                item { LukuButton("⚙️", primary = false) { nav.go(Screen.Settings) } }
-            }
-        }
+        SearchBarStub(nav)
         when {
             error != null -> ErrorBox(error!!) { reload++ }
             catalogs.isEmpty() && continueList.isEmpty() -> Loading("Je add-ons laden…")
             else -> LazyColumn(contentPadding = PaddingValues(bottom = 40.dp)) {
+                item(key = "kalender") {
+                    Row(Modifier.padding(top = 8.dp)) {
+                        Chip("📅 Kalender: nieuwe afleveringen", false) { nav.go(Screen.Calendar) }
+                    }
+                }
                 if (continueList.isNotEmpty()) {
                     item(key = "continue") {
                         SectionTitle("Verder kijken")
@@ -233,7 +225,14 @@ fun CatalogRow(nav: Nav, c: CatalogDef) {
     val list = items
     if (list != null && list.isEmpty()) return
     Column {
-        SectionTitle(c.title)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { SectionTitle(c.title) }
+            Box(
+                Modifier
+                    .tv(RoundedCornerShape(8.dp)) { nav.go(Screen.CatalogAll(c)) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) { Text("ALLES ZIEN ›", color = Z.dim, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+        }
         if (list == null) {
             Box(Modifier.height(60.dp)) { Text("Laden…", color = Z.dim) }
         } else {
@@ -301,45 +300,26 @@ fun SearchScreen(nav: Nav) {
     }
 }
 
-// ======================= Instellingen =======================
+// ======================= Add-ons =======================
 
 @Composable
-fun SettingsScreen(nav: Nav) {
+fun AddonsScreen(nav: Nav) {
     val app = App.instance
     val scope = rememberCoroutineScope()
     var addonUrl by remember { mutableStateOf("") }
     var msg by remember { mutableStateOf<String?>(null) }
     var addons by remember { mutableStateOf(app.stremio.addons) }
 
-    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 30.dp)) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                LukuButton("←", primary = false) { nav.back() }
-                Spacer(Modifier.width(12.dp))
-                Text("Instellingen", color = Z.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-        item {
-            SectionTitle("Account")
+            TopBar(nav, "Add-ons (${addons.size})")
             Text(
-                app.prefs.email?.let { "Ingelogd als $it" } ?: "Zonder account (alleen Cinemeta + zelf toegevoegde add-ons)",
-                color = Z.dim,
-            )
-            Spacer(Modifier.height(8.dp))
-            LukuButton("Uitloggen", primary = false) {
-                app.prefs.logout()
-                nav.reset(Screen.Login)
-            }
-        }
-        item {
-            SectionTitle("Add-ons (${addons.size})")
-            Text(
-                "Add-ons komen uit je Stremio-account. Pas je ze aan in Stremio, dan zie je dat hier na het vernieuwen.",
+                "Add-ons komen uit je Stremio-account. Pas je ze aan in Stremio, druk dan hier op Vernieuwen.",
                 color = Z.dim,
                 fontSize = 13.sp,
             )
         }
-        items(addons, key = { it.transportUrl }) { a ->
+        items(addons) { a ->
             Row(
                 Modifier.fillMaxWidth().background(Z.panel, RoundedCornerShape(10.dp)).padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -392,6 +372,28 @@ fun SettingsScreen(nav: Nav) {
             }
             if (msg != null) Text(msg!!, color = Z.dim, modifier = Modifier.padding(top = 8.dp))
         }
+    }
+}
+
+// ======================= Instellingen =======================
+
+@Composable
+fun SettingsScreen(nav: Nav) {
+    val app = App.instance
+    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 30.dp)) {
+        item {
+            TopBar(nav, "Instellingen")
+            SectionTitle("Account")
+            Text(
+                app.prefs.email?.let { "Ingelogd als $it" } ?: "Zonder account (alleen Cinemeta + zelf toegevoegde add-ons)",
+                color = Z.dim,
+            )
+            Spacer(Modifier.height(8.dp))
+            LukuButton("Uitloggen", primary = false) {
+                app.prefs.logout()
+                nav.reset(Screen.Login)
+            }
+        }
         item {
             SectionTitle("Opslag")
             Text(
@@ -400,7 +402,10 @@ fun SettingsScreen(nav: Nav) {
                 color = Z.dim,
                 fontSize = 13.sp,
             )
-            Spacer(Modifier.height(40.dp))
+        }
+        item {
+            SectionTitle("Over")
+            Text("Teyfey Luku · gemaakt voor MALUKU", color = Z.dim, fontSize = 13.sp)
         }
     }
 }
