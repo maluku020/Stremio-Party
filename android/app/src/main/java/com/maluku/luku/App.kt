@@ -17,6 +17,7 @@ class App : Application() {
         stremio = StremioRepo(prefs)
         torrents = TorrentEngine(this)
         stremio.loadCached()
+        torrents.warmUp()
     }
 
     companion object {

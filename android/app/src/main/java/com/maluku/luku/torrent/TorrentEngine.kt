@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.libtorrent4j.Priority
 import org.libtorrent4j.SessionManager
+import org.libtorrent4j.Sha1Hash
 import org.libtorrent4j.TorrentFlags
 import org.libtorrent4j.TorrentHandle
 import org.libtorrent4j.TorrentInfo
@@ -39,6 +40,11 @@ class TorrentEngine(ctx: Context) {
         return s
     }
 
+    /** Motor alvast starten bij het openen van de app, zodat hij het netwerk al kent als je op een bron drukt. */
+    fun warmUp() {
+        Thread { runCatching { session() } }.start()
+    }
+
     fun freeBytes(): Long = runCatching { StatFs(dir.absolutePath).availableBytes }.getOrDefault(0L)
 
     /**
@@ -58,9 +64,26 @@ class TorrentEngine(ctx: Context) {
             for (t in trackers.take(20)) append("&tr=").append(URLEncoder.encode(t, "UTF-8"))
         }
         status("Torrent zoeken…")
-        val data = s.fetchMagnet(magnet, 60, dir)
-            ?: throw IOException("Geen mensen gevonden die deze film delen. Kies een andere bron.")
-        val ti = TorrentInfo.bdecode(data)
+        // Magnet direct toevoegen: de gevonden deelnemers blijven verbonden (sneller dan eerst los de info ophalen)
+        s.download(magnet, dir, TorrentFlags.SEQUENTIAL_DOWNLOAD)
+        var handle: TorrentHandle? = null
+        var waited = 0
+        while (true) {
+            if (handle == null || !handle.isValid) handle = s.find(Sha1Hash(infoHash))
+            val h = handle
+            if (h != null && h.isValid && h.status().hasMetadata()) break
+            if (waited >= 60_000) {
+                runCatching { if (h != null) s.remove(h) }
+                throw IOException("Geen mensen gevonden die deze film delen. Kies een andere bron.")
+            }
+            if (waited % 1000 == 0 && h != null && h.isValid) {
+                status("Torrent zoeken… (" + h.status().numPeers() + " deelnemers)")
+            }
+            Thread.sleep(250)
+            waited += 250
+        }
+        val th: TorrentHandle = handle!!
+        val ti: TorrentInfo = th.torrentFile()
         val fs = ti.files()
         val n = fs.numFiles()
         val idx = fileIdx?.takeIf { it in 0 until n } ?: (0 until n).maxByOrNull { fs.fileSize(it) } ?: 0
@@ -68,6 +91,7 @@ class TorrentEngine(ctx: Context) {
 
         val free = freeBytes()
         if (size > free - 200L * 1024 * 1024) {
+            runCatching { s.remove(th) }
             throw IOException(
                 "Dit bestand is te groot voor de opslag van dit apparaat (" +
                     gb(size) + " nodig, " + gb(free) + " vrij). Kies een kleinere bron."
@@ -75,16 +99,13 @@ class TorrentEngine(ctx: Context) {
         }
 
         status("Verbinden met deelnemers…")
-        s.download(ti, dir)
-        val handle: TorrentHandle = s.find(ti.infoHash())
-            ?: throw IOException("Torrent kon niet gestart worden")
         val prios = Array(n) { if (it == idx) Priority.DEFAULT else Priority.IGNORE }
-        handle.prioritizeFiles(prios)
-        handle.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
-        handle.resume()
+        th.prioritizeFiles(prios)
+        th.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
+        th.resume()
 
         val stream = TorrentStream(
-            handle = handle,
+            handle = th,
             file = File(dir, fs.filePath(idx)),
             size = size,
             fileOffset = fs.fileOffset(idx),
