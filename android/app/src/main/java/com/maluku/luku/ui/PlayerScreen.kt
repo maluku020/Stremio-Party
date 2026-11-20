@@ -113,8 +113,11 @@ fun PlayerScreen(nav: Nav, stream: StreamItem, info: PlayInfo) {
         try {
             val resume = app.library.resumeFor(info.metaId, info.videoId).let { if (it < 5_000) 0L else it }
             // Ondertitels tegelijk ophalen, terwijl de torrent start
-            val subsJob = async {
-                withTimeoutOrNull(8_000) { runCatching { app.stremio.subtitles(info.type, info.videoId) }.getOrNull() } ?: emptyList<SubtitleItem>()
+            val subsJob = async(kotlinx.coroutines.Dispatchers.IO) {
+                withTimeoutOrNull(10_000) {
+                    val list = runCatching { app.stremio.subtitles(info.type, info.videoId) }.getOrNull() ?: emptyList()
+                    downloadSubs(ctx, list)
+                } ?: emptyList<SubtitleItem>()
             }
             var t: TorrentStream? = null
             if (stream.isTorrent) {
@@ -206,3 +209,33 @@ private fun InfoBox(modifier: Modifier, title: String, line: String) {
         }
     }
 }
+
+
+/**
+ * Haalt ondertitels vooraf zelf op (max. een paar seconden per stuk) en geeft lokale bestanden terug.
+ * Zo hoeft de speler nooit op een trage ondertitel-server te wachten.
+ */
+private suspend fun downloadSubs(ctx: android.content.Context, list: List<SubtitleItem>): List<SubtitleItem> =
+    kotlinx.coroutines.coroutineScope {
+        val dir = java.io.File(ctx.cacheDir, "subs").apply { deleteRecursively(); mkdirs() }
+        val client = com.maluku.luku.data.Net.client.newBuilder()
+            .callTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+        list.mapIndexed { i, s ->
+            async {
+                runCatching {
+                    val req = okhttp3.Request.Builder().url(s.url).header("User-Agent", "TeyfeyLuku/0.1").build()
+                    client.newCall(req).execute().use { res ->
+                        if (!res.isSuccessful) return@runCatching null
+                        val bytes = res.body?.bytes() ?: return@runCatching null
+                        if (bytes.size < 50) return@runCatching null
+                        val head = String(bytes, 0, minOf(bytes.size, 16))
+                        val ext = if (head.contains("WEBVTT")) "vtt" else "srt"
+                        val f = java.io.File(dir, "sub$i.$ext")
+                        f.writeBytes(bytes)
+                        s.copy(url = android.net.Uri.fromFile(f).toString())
+                    }
+                }.getOrNull()
+            }
+        }.map { it.await() }.filterNotNull()
+    }

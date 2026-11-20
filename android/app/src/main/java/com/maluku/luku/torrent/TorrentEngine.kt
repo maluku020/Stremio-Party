@@ -152,17 +152,19 @@ class TorrentStream(
     /** Geeft de stukken vanaf [pos] voorrang (de speler heeft ze zo nodig). */
     fun prioritize(pos: Long) {
         val first = pieceAt(pos)
-        val window = (24L * 1024 * 1024 / pieceLength).toInt().coerceIn(4, 64) // ±24 MB vooruit
+        val window = (32L * 1024 * 1024 / pieceLength).toInt().coerceIn(6, 80) // ±32 MB vooruit
         for (i in 0 until window) {
             val p = first + i
             if (p >= numPieces) break
-            if (!handle.havePiece(p)) handle.setPieceDeadline(p, i * 150)
+            if (!handle.havePiece(p)) handle.setPieceDeadline(p, i * 40)
         }
     }
 
     fun prioritizeTail() {
+        // Laatste ±10 MB: daar staat bij MKV/MP4 vaak de inhoudsopgave die de speler eerst wil lezen
         val last = pieceAt(size - 1)
-        for (p in (last - 1).coerceAtLeast(0)..last) handle.setPieceDeadline(p, 300)
+        val tail = (10L * 1024 * 1024 / pieceLength).toInt().coerceIn(2, 12)
+        for (p in (last - tail + 1).coerceAtLeast(0)..last) handle.setPieceDeadline(p, 100)
     }
 
     /** Leest bytes; wacht tot het benodigde stuk binnen is. Geeft -1 aan het eind. */
@@ -170,8 +172,9 @@ class TorrentStream(
         if (pos >= size) return -1
         val piece = pieceAt(pos)
         if (piece != lastPiece) {
-            // Gesprongen (spoelen)? Oude voorrang wissen
-            if (lastPiece >= 0 && (piece < lastPiece || piece > lastPiece + 2)) handle.clearPieceDeadlines()
+            // Echt gesprongen (spoelen)? Oude voorrang wissen. Begin/eind van het bestand lezen is geen spoelen.
+            val nearEdge = piece < 8 || piece > numPieces - 14
+            if (!nearEdge && lastPiece >= 0 && (piece < lastPiece || piece > lastPiece + 2)) handle.clearPieceDeadlines()
             prioritize(pos)
             lastPiece = piece
         }
@@ -199,7 +202,8 @@ class TorrentStream(
         val st = handle.status()
         val kb = st.downloadPayloadRate() / 1024
         val speed = if (kb > 1024) String.format("%.1f MB/s", kb / 1024.0) else "$kb KB/s"
-        "${st.numPeers()} deelnemers · $speed"
+        val mb = st.totalDone() / (1024 * 1024)
+        "${st.numPeers()} deelnemers · $speed · $mb MB binnen"
     }.getOrDefault("")
 
     fun close() {

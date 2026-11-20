@@ -6,6 +6,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -19,6 +20,7 @@ object Players {
 
     /** ExoPlayer met FFmpeg voor geluid dat Android zelf niet kan (AC3, E-AC3, DTS, TrueHD). */
     fun create(ctx: Context): ExoPlayer {
+        appContext = ctx.applicationContext
         val renderers = DefaultRenderersFactory(ctx)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
@@ -39,6 +41,8 @@ object Players {
      * Speelt een torrent ([torrent] != null) of een gewone link ([url]) af,
      * met ondertitels van add-ons erbij.
      */
+    lateinit var appContext: Context
+
     fun play(
         player: ExoPlayer,
         torrent: TorrentStream?,
@@ -53,13 +57,13 @@ object Players {
         }
         val subs = subtitles.map { s ->
             MediaItem.SubtitleConfiguration.Builder(Uri.parse(s.url))
-                .setMimeType(if (s.url.contains(".vtt", ignoreCase = true)) MimeTypes.TEXT_VTT else MimeTypes.APPLICATION_SUBRIP)
+                .setMimeType(if (s.url.endsWith(".vtt", ignoreCase = true)) MimeTypes.TEXT_VTT else MimeTypes.APPLICATION_SUBRIP)
                 .setLanguage(s.lang)
                 .setLabel((if (s.lang == "nl") "Nederlands" else "Engels") + " · " + s.addonName)
                 .build()
         }
         val item = MediaItem.Builder().setUri(mainUri).setSubtitleConfigurations(subs).build()
-        val factory = DataSource.Factory { RoutingDataSource(torrent) }
+        val factory = DataSource.Factory { RoutingDataSource(appContext, torrent) }
         val source = DefaultMediaSourceFactory(factory).createMediaSource(item)
         player.setMediaSource(source, startMs)
         player.prepare()
@@ -68,11 +72,14 @@ object Players {
 }
 
 /** Stuurt torrent:// naar de torrent-motor en al het andere (links, ondertitels) naar internet. */
-class RoutingDataSource(private val torrent: TorrentStream?) : DataSource {
-    private val http: DataSource = DefaultHttpDataSource.Factory()
-        .setAllowCrossProtocolRedirects(true)
-        .setUserAgent("TeyfeyLuku/0.1")
-        .createDataSource()
+class RoutingDataSource(ctx: Context, private val torrent: TorrentStream?) : DataSource {
+    // Gewone bron: links (http) én lokale bestanden (de vooraf opgehaalde ondertitels)
+    private val http: DataSource = DefaultDataSource.Factory(
+        ctx,
+        DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setUserAgent("TeyfeyLuku/0.1"),
+    ).createDataSource()
     private var current: DataSource? = null
     private val listeners = mutableListOf<TransferListener>()
 
