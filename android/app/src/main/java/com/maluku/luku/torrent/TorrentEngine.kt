@@ -69,7 +69,7 @@ class TorrentEngine(ctx: Context) {
         var handle: TorrentHandle? = null
         var waited = 0
         while (true) {
-            if (handle == null || !handle.isValid) handle = s.find(Sha1Hash(infoHash))
+            if (handle == null || !handle.isValid) handle = s.find(Sha1Hash.parseHex(infoHash))
             val h = handle
             if (h != null && h.isValid && h.status().hasMetadata()) break
             if (waited >= 60_000) {
