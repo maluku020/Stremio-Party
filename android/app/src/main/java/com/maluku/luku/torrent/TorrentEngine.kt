@@ -56,7 +56,11 @@ class TorrentEngine(ctx: Context) {
             sp.setBoolean(settings_pack.bool_types.announce_to_all_tiers.swigValue(), true)
             sp.setInteger(settings_pack.int_types.connection_speed.swigValue(), 200)
             sp.setInteger(settings_pack.int_types.torrent_connect_boost.swigValue(), 80)
-            sp.setInteger(settings_pack.int_types.max_out_request_queue.swigValue(), 1500)
+            // Korte wachtrij per deelnemer: een nieuw "dit stuk eerst" is dan meteen aan de beurt
+            sp.setInteger(settings_pack.int_types.request_queue_time.swigValue(), 1)
+            sp.setInteger(settings_pack.int_types.max_out_request_queue.swigValue(), 60)
+            sp.setInteger(settings_pack.int_types.whole_pieces_threshold.swigValue(), 1)
+            sp.setInteger(settings_pack.int_types.piece_timeout.swigValue(), 5)
             sp.setInteger(settings_pack.int_types.request_timeout.swigValue(), 10)
             sp.setInteger(settings_pack.int_types.peer_connect_timeout.swigValue(), 7)
         }
@@ -100,7 +104,7 @@ class TorrentEngine(ctx: Context) {
         var handle: TorrentHandle? = null
         if (cached != null) {
             status("Torrent-info gevonden…")
-            s.download(cached, dir)
+            s.download(cached, dir, null, null, null, TorrentFlags.PAUSED)
             handle = s.find(cached.infoHash())
             // Ook de trackers van de add-on + openbare trackers toevoegen (meer deelnemers)
             runCatching { for (t in (trackers + PUBLIC_TRACKERS).distinct().take(30)) handle?.addTracker(org.libtorrent4j.AnnounceEntry(t)) }
@@ -120,8 +124,8 @@ class TorrentEngine(ctx: Context) {
             if (waited % 1000 == 0 && h != null && h.isValid) {
                 status("Torrent zoeken… (" + h.status().numPeers() + " deelnemers)")
             }
-            Thread.sleep(250)
-            waited += 250
+            Thread.sleep(100)
+            waited += 100
         }
         metaSeconds = (System.currentTimeMillis() - t0) / 1000.0
         val th: TorrentHandle = handle!!
@@ -151,7 +155,6 @@ class TorrentEngine(ctx: Context) {
             th.prioritizePieces(pp)
         }
         th.unsetFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
-        th.resume()
 
         val stream = TorrentStream(
             handle = th,
@@ -164,6 +167,7 @@ class TorrentEngine(ctx: Context) {
         )
         // Begin en eind van het bestand eerst (daar staat de info die de speler nodig heeft)
         stream.prioritize(0)
+        th.resume() // pas nu starten: de prioriteiten staan goed, dus de rij vult zich meteen met de juiste stukken
         current = stream
         stream
     }
