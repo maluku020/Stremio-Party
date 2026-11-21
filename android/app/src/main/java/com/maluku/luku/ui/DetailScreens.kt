@@ -150,6 +150,7 @@ private fun DetailContent(nav: Nav, m: Meta) {
                         Text("Bronnen", color = Z.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(10.dp))
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            item { FastestButton(movieStreams) { nav.go(Screen.Player(it, movieInfo)) } }
                             items(movieStreams) { st -> StreamRow(st, free) { nav.go(Screen.Player(st, movieInfo)) } }
                             item { StreamsFooter(movieStreams.isEmpty(), streamsDone) }
                         }
@@ -217,6 +218,7 @@ private fun DetailContent(nav: Nav, m: Meta) {
                 }
                 if (!isSeries) {
                     item { Spacer(Modifier.height(10.dp)) }
+                    item { Box(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) { FastestButton(movieStreams) { nav.go(Screen.Player(it, movieInfo)) } } }
                     items(movieStreams) { st ->
                         Box(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
                             StreamRow(st, free) { nav.go(Screen.Player(st, movieInfo)) }
@@ -394,12 +396,37 @@ fun StreamsScreen(nav: Nav, info: PlayInfo) {
             else -> {
                 val free = remember { app.torrents.freeBytes() }
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                    item { FastestButton(found) { nav.go(Screen.Player(it, info)) } }
                     items(found) { s -> StreamRow(s, free) { nav.go(Screen.Player(s, info)) } }
                     if (!done) item { Text("Meer bronnen laden…", color = Z.dim, fontSize = 13.sp, modifier = Modifier.padding(8.dp)) }
                 }
             }
         }
     }
+}
+
+/** Kiest de bron die waarschijnlijk het snelst start: veel delers, niet te groot, liefst geen 4K. */
+fun bestStream(list: List<StreamItem>): StreamItem? {
+    val torrents = list.filter { it.isTorrent && it.seeders != null }
+    if (torrents.isEmpty()) return null
+    return torrents.maxByOrNull { s ->
+        val seeds = (s.seeders ?: 0).toDouble()
+        val size = s.sizeBytes ?: 2_000_000_000L
+        val sizeFactor = when {
+            size <= 3_000_000_000L -> 1.0
+            size <= 6_000_000_000L -> 0.6
+            else -> 0.3
+        }
+        val qFactor = if (s.quality == "4K") 0.6 else 1.0
+        seeds * sizeFactor * qFactor
+    }
+}
+
+@Composable
+private fun FastestButton(list: List<StreamItem>, onPick: (StreamItem) -> Unit) {
+    val best = remember(list.size) { bestStream(list) } ?: return
+    val info = listOfNotNull(best.seeders?.let { "👤 $it" }, best.quality.ifBlank { null }, best.sizeText).joinToString(" · ")
+    LukuButton("⚡  Snelste bron  ($info)", modifier = Modifier.fillMaxWidth()) { onPick(best) }
 }
 
 /** Bronnen ophalen: elke add-on verschijnt zodra hij antwoordt (zoals Stremio). */

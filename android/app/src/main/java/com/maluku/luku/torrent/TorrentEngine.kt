@@ -143,6 +143,13 @@ class TorrentEngine(ctx: Context) {
         status("Verbinden met deelnemers…")
         val prios = Array(n) { if (it == idx) Priority.DEFAULT else Priority.IGNORE }
         th.prioritizeFiles(prios)
+        // Stukken van ons bestand: LAAG. Alleen wat de speler nu nodig heeft gaat omhoog (zie prioritize).
+        runCatching {
+            val firstP = (fs.fileOffset(idx) / ti.pieceLength()).toInt()
+            val lastP = ((fs.fileOffset(idx) + size - 1) / ti.pieceLength()).toInt()
+            val pp = Array(ti.numPieces()) { if (it in firstP..lastP) Priority.LOW else Priority.IGNORE }
+            th.prioritizePieces(pp)
+        }
         th.unsetFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
         th.resume()
 
@@ -243,12 +250,13 @@ class TorrentStream(
     fun prioritize(pos: Long) {
         val first = pieceAt(pos)
         if (!started) {
-            // Vóór het eerste beeld: géén deadlines (die lieten de motor hetzelfde stuk bij iedereen tegelijk
-            // opvragen), maar gewoon "dit stuk + het volgende eerst" via stukprioriteit.
-            for (i in 0 until 2) {
-                val p = first + i
-                if (p < numPieces && !handle.havePiece(p)) handle.piecePriority(p, Priority.TOP_PRIORITY)
+            // Vóór het eerste beeld: ALLEEN het stuk dat de speler nu nodig heeft krijgt topprioriteit + deadline,
+            // het volgende alleen topprioriteit. Al het andere staat op LAAG. Zo gaat alle snelheid naar dit stuk.
+            if (!handle.havePiece(first)) {
+                handle.piecePriority(first, Priority.TOP_PRIORITY)
+                handle.setPieceDeadline(first, 0)
             }
+            if (first + 1 < numPieces && !handle.havePiece(first + 1)) handle.piecePriority(first + 1, Priority.TOP_PRIORITY)
             return
         }
         // Beeld loopt: ruim vooruit, met deadlines die ver genoeg uit elkaar liggen
@@ -256,7 +264,10 @@ class TorrentStream(
         for (i in 0 until window) {
             val p = first + i
             if (p >= numPieces) break
-            if (!handle.havePiece(p)) handle.setPieceDeadline(p, 1000 + i * 700)
+            if (!handle.havePiece(p)) {
+                handle.piecePriority(p, Priority.TOP_PRIORITY)
+                handle.setPieceDeadline(p, if (i == 0) 0 else 1000 + i * 700)
+            }
         }
     }
 
