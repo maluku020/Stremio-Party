@@ -70,6 +70,9 @@ class TorrentEngine(ctx: Context) {
         Thread { runCatching { session() } }.start()
     }
 
+    /** Hoe lang het zoeken naar de torrent-info duurde (voor de meetbalk). */
+    @Volatile var metaSeconds = 0.0
+
     fun freeBytes(): Long = runCatching { StatFs(dir.absolutePath).availableBytes }.getOrDefault(0L)
 
     /**
@@ -89,6 +92,7 @@ class TorrentEngine(ctx: Context) {
             // Trackers van de add-on + bekende openbare trackers: sneller deelnemers vinden
             for (t in (trackers + PUBLIC_TRACKERS).distinct().take(30)) append("&tr=").append(URLEncoder.encode(t, "UTF-8"))
         }
+        val t0 = System.currentTimeMillis()
         status("Torrent zoeken…")
         // Magnet direct toevoegen: de gevonden deelnemers blijven verbonden (sneller dan eerst los de info ophalen)
         s.download(magnet, dir, TorrentFlags.SEQUENTIAL_DOWNLOAD)
@@ -108,6 +112,7 @@ class TorrentEngine(ctx: Context) {
             Thread.sleep(250)
             waited += 250
         }
+        metaSeconds = (System.currentTimeMillis() - t0) / 1000.0
         val th: TorrentHandle = handle!!
         val ti: TorrentInfo = th.torrentFile()
         val fs = ti.files()
@@ -191,25 +196,35 @@ class TorrentStream(
     @Volatile var dbgPos = -1L
     @Volatile var dbgWaitPiece = -1
     @Volatile var dbgLast = "nog niet gelezen"
+    val dbgStart = System.currentTimeMillis()
+    @Volatile var dbgFirstPieceMs = -1L
 
     private fun pieceAt(pos: Long): Int = ((fileOffset + pos) / pieceLength).toInt().coerceIn(0, numPieces - 1)
 
-    /** Geeft de stukken vanaf [pos] voorrang (de speler heeft ze zo nodig). */
+    /** Aantal keer dat de speler al iets gelezen heeft: in het begin kleine vensters (snel eerste beeld), daarna ruim. */
+    @Volatile private var started = false
+
+    /**
+     * Geeft de stukken vanaf [pos] voorrang. Het stuk dat de speler NU nodig heeft krijgt deadline 0,
+     * de volgende een oplopende deadline. Vóór het eerste beeld een klein venster (±4 MB),
+     * daarna ±32 MB vooruit.
+     */
     fun prioritize(pos: Long) {
         val first = pieceAt(pos)
-        val window = (32L * 1024 * 1024 / pieceLength).toInt().coerceIn(6, 80) // ±32 MB vooruit
+        val bytes = if (started) 32L * 1024 * 1024 else 4L * 1024 * 1024
+        val window = (bytes / pieceLength).toInt().coerceIn(3, 80)
         for (i in 0 until window) {
             val p = first + i
             if (p >= numPieces) break
-            if (!handle.havePiece(p)) handle.setPieceDeadline(p, i * 40)
+            if (!handle.havePiece(p)) handle.setPieceDeadline(p, if (i == 0) 0 else 150 + i * 120)
         }
     }
 
+    /** Alleen het laatste beetje van het bestand (±1,5 MB): daar kijkt de speler bij MKV/MP4 even naar. */
     fun prioritizeTail() {
-        // Laatste ±10 MB: daar staat bij MKV/MP4 vaak de inhoudsopgave die de speler eerst wil lezen
         val last = pieceAt(size - 1)
-        val tail = (10L * 1024 * 1024 / pieceLength).toInt().coerceIn(2, 12)
-        for (p in (last - tail + 1).coerceAtLeast(0)..last) handle.setPieceDeadline(p, 100)
+        val tail = (1_500_000L / pieceLength).toInt().coerceIn(1, 4)
+        for (p in (last - tail + 1).coerceAtLeast(0)..last) handle.setPieceDeadline(p, 400)
     }
 
     /** Leest bytes; wacht tot het benodigde stuk binnen is. Geeft -1 aan het eind. */
@@ -242,8 +257,10 @@ class TorrentStream(
             while (!file.exists() && tries < 50) { Thread.sleep(100); tries++ }
             RandomAccessFile(file, "r").also { raf = it }
         }
+        if (dbgFirstPieceMs < 0) dbgFirstPieceMs = System.currentTimeMillis() - dbgStart
         r.seek(pos)
         val got = r.read(buf, off, n)
+        if (!started && pos > 3L * 1024 * 1024) { started = true; prioritize(pos) }
         dbgWaitPiece = -1
         dbgLast = "gelezen $got (bestand ${r.length() / 1_000_000} MB op schijf)"
         return got
@@ -251,7 +268,9 @@ class TorrentStream(
 
     fun debug(): String {
         val wait = if (dbgWaitPiece >= 0) "wacht op stuk $dbgWaitPiece (heb: ${runCatching { handle.havePiece(dbgWaitPiece) }.getOrDefault(false)})" else "niet aan het wachten"
-        return "Lezen: ${dbgReads}× · plek ${dbgPos / 1_000_000} MB van ${size / 1_000_000} MB · $wait · $dbgLast · " +
+        val t = (System.currentTimeMillis() - dbgStart) / 1000
+        val first = if (dbgFirstPieceMs >= 0) "eerste stuk na ${dbgFirstPieceMs / 100 / 10.0}s" else "eerste stuk nog niet"
+        return "${t}s sinds info binnen · $first · Lezen: ${dbgReads}× · plek ${dbgPos / 1_000_000} MB van ${size / 1_000_000} MB · $wait · $dbgLast · " +
             "stuk ${pieceLength / 1024} KB, eerste stuk ${pieceAt(0)}, laatste ${pieceAt(size - 1)}"
     }
 

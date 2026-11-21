@@ -148,7 +148,7 @@ fun PlayerScreen(nav: Nav, stream: StreamItem, info: PlayInfo) {
             // Na 20 s nog niets binnen → deze bron wordt niet (genoeg) gedeeld
             stalled = torrent != null && tick >= 20 && torrent!!.downloaded() == 0L && player.currentPosition == 0L
             val st = when (player.playbackState) { Player.STATE_IDLE -> "IDLE"; Player.STATE_BUFFERING -> "BUFFERING"; Player.STATE_READY -> "READY"; else -> "ENDED" }
-            debug = "Fase: $stage · speler $st · ${player.currentPosition / 1000}s\n" + (torrent?.debug() ?: "gewone link")
+            debug = "Fase: $stage · speler $st · ${player.currentPosition / 1000}s · info na ${app.torrents.metaSeconds}s\n" + (torrent?.debug() ?: "gewone link")
             val dur = player.duration
             showNext = next != null && dur != C.TIME_UNSET && dur > 0 && dur - player.currentPosition < 90_000
             if (tick % 15 == 14) {
