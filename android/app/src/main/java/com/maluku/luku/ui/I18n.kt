@@ -245,7 +245,7 @@ private val WORDS: Map<String, Pair<String, String>> = mapOf(
     "Verbinden…" to ("Connecting…" to "Conectando…"),
     "🎉  Party maken" to ("🎉  Create party" to "🎉  Crear fiesta"),
     "Meedoen met een code" to ("Join with a code" to "Unirse con un código"),
-    "Code, bijv. MLK-AB12" to ("Code, e.g. MLK-AB12" to "Código, p. ej. MLK-AB12"),
+    "Code, bijv. B4QD" to ("Code, e.g. B4QD" to "Código, p. ej. B4QD"),
     "Meedoen" to ("Join" to "Unirse"),
     "Verbinden met de party-server… De eerste keer kan dit tot 30 seconden duren (de server wordt dan wakker)." to
         ("Connecting to the party server… The first time this can take up to 30 seconds (the server is waking up)." to "Conectando con el servidor… La primera vez puede tardar hasta 30 segundos (el servidor se está despertando)."),

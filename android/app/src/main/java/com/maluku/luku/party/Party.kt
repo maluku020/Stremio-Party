@@ -85,7 +85,10 @@ class Party {
         wantRoom = true
         error = null
         code = null
-        pendingCode = joinCode.trim().uppercase()
+        // Streepje en "MLK" mogen weg: "b4qd", "mlkb4qd" en "MLK-B4QD" werken allemaal
+        val raw = joinCode.uppercase().filter { it.isLetterOrDigit() }
+        val core = if (raw.length == 7 && raw.startsWith("MLK")) raw.drop(3) else raw
+        pendingCode = if (core.length == 4) "MLK-$core" else joinCode.trim().uppercase()
         send(JSONObject().put("type", "join").put("code", pendingCode).put("name", name))
     }
 

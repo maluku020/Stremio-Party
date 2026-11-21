@@ -63,7 +63,7 @@ fun PartyScreen(nav: Nav) {
                 SectionTitle("Meedoen met een code")
                 OutlinedTextField(
                     value = joinCode, onValueChange = { joinCode = it.take(12) },
-                    label = { Text("Code, bijv. MLK-AB12") }, singleLine = true, colors = lukuFieldColors(),
+                    label = { Text("Code, bijv. B4QD") }, singleLine = true, colors = lukuFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
