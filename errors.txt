@@ -1,0 +1,4 @@
+48:e: file:///home/runner/work/Stremio-Party/Stremio-Party/android/app/src/main/java/com/maluku/luku/party/Party.kt:48:44 Platform declaration clash: The following declarations have the same JVM signature (setHostOnly(Z)V):
+51:e: file:///home/runner/work/Stremio-Party/Stremio-Party/android/app/src/main/java/com/maluku/luku/party/Party.kt:106:5 Platform declaration clash: The following declarations have the same JVM signature (setHostOnly(Z)V):
+58:FAILURE: Build failed with an exception.
+60:* What went wrong:
