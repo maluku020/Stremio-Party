@@ -406,7 +406,8 @@ fun SettingsScreen(nav: Nav) {
         }
         item {
             SectionTitle("Over")
-            Text("Teyfey Luku · gemaakt voor MALUKU", color = Z.dim, fontSize = 13.sp)
+            val ver = remember { runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrDefault("") }
+            Text("Teyfey Luku $ver · gemaakt voor MALUKU", color = Z.dim, fontSize = 13.sp)
         }
     }
 }

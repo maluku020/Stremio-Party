@@ -223,9 +223,10 @@ fun PlayerScreen(nav: Nav, startStream: StreamItem, info: PlayInfo, race: List<S
         }
     }
 
-    LaunchedEffect(notice) {
-        if (notice != null) {
-            delay(5000)
+    // Melding pas laten verdwijnen 6 s nadat het beeld er is (anders mis je hem tijdens het laden)
+    LaunchedEffect(notice, buffering) {
+        if (notice != null && !buffering) {
+            delay(6000)
             notice = null
         }
     }
@@ -254,7 +255,7 @@ fun PlayerScreen(nav: Nav, startStream: StreamItem, info: PlayInfo, race: List<S
                 }
             }
         } else if (buffering) {
-            InfoBox(Modifier.align(Alignment.TopStart), info.label, status)
+            InfoBox(Modifier.align(Alignment.TopStart), info.label, status + (notice?.let { "\n$it" } ?: ""))
             Text(
                 debug,
                 color = Color(0xFFB0B0B0),
