@@ -214,7 +214,15 @@ class Party {
             "notice" -> notice = msg.optString("text")
             "error" -> {
                 error = msg.optString("text")
-                if (code == null) wantRoom = false
+                if (code == null) {
+                    wantRoom = false
+                    // Verbinding sluiten: de volgende poging maakt een verse verbinding (handig na een server-update)
+                    val w = ws
+                    ws = null
+                    connected = false
+                    connecting = false
+                    runCatching { w?.close(1000, "retry") }
+                }
             }
             "left" -> { code = null; members.clear() }
             "nav" -> {
