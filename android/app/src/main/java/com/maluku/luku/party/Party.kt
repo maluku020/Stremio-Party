@@ -103,7 +103,7 @@ class Party {
         connected = false
     }
 
-    fun setHostOnly(v: Boolean) = send(JSONObject().put("type", "hostOnly").put("value", v))
+    fun changeHostOnly(v: Boolean) = send(JSONObject().put("type", "hostOnly").put("value", v))
 
     fun sendChat(text: String) {
         if (text.isBlank()) return

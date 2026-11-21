@@ -103,9 +103,9 @@ fun PartyScreen(nav: Nav) {
             if (party.amHost) item {
                 SectionTitle("Bediening")
                 Row {
-                    Chip("Iedereen bedient", !party.hostOnly) { party.setHostOnly(false) }
+                    Chip("Iedereen bedient", !party.hostOnly) { party.changeHostOnly(false) }
                     Spacer(Modifier.width(8.dp))
-                    Chip("Alleen ik", party.hostOnly) { party.setHostOnly(true) }
+                    Chip("Alleen ik", party.hostOnly) { party.changeHostOnly(true) }
                 }
             } else if (party.hostOnly) item {
                 Text("De host bedient nu alleen. Jij kijkt mee.", color = Z.dim, fontSize = 13.sp)
