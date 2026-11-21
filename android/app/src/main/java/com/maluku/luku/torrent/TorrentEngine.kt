@@ -196,6 +196,7 @@ class TorrentStream(
     @Volatile var dbgPos = -1L
     @Volatile var dbgWaitPiece = -1
     @Volatile var dbgLast = "nog niet gelezen"
+    @Volatile var dbgFills = 0
     val dbgStart = System.currentTimeMillis()
     @Volatile var dbgFirstPieceMs = -1L
 
@@ -227,11 +228,35 @@ class TorrentStream(
         for (p in (last - tail + 1).coerceAtLeast(0)..last) handle.setPieceDeadline(p, 400)
     }
 
+    // Leesbuffer: de speler leest vaak in kruimels van een paar bytes (bijv. de inhoudsopgave aan het eind
+    // van een MKV). Elke kruimel los uit de opslag halen is heel traag; daarom halen we halve MB's tegelijk.
+    private val cache = ByteArray(512 * 1024)
+    private var cacheStart = -1L
+    private var cacheLen = 0
+    private val havePieces = java.util.BitSet() // stukken die al binnen zijn (blijven binnen)
+
+    private fun have(p: Int): Boolean {
+        if (havePieces.get(p)) return true
+        val h = handle.havePiece(p)
+        if (h) havePieces.set(p)
+        return h
+    }
+
     /** Leest bytes; wacht tot het benodigde stuk binnen is. Geeft -1 aan het eind. */
+    @Synchronized
     fun read(pos: Long, buf: ByteArray, off: Int, len: Int): Int {
         dbgReads++
         dbgPos = pos
         if (pos >= size) { dbgLast = "einde bestand"; return -1 }
+
+        // 1) Snel: uit de leesbuffer in het geheugen
+        if (cacheStart >= 0 && pos >= cacheStart && pos < cacheStart + cacheLen) {
+            val n = minOf(len.toLong(), cacheStart + cacheLen - pos).toInt()
+            System.arraycopy(cache, (pos - cacheStart).toInt(), buf, off, n)
+            return n
+        }
+
+        // 2) Stuk nodig dat nog niet in de buffer zit
         val piece = pieceAt(pos)
         if (piece != lastPiece) {
             // Echt gesprongen (spoelen)? Oude voorrang wissen. Begin/eind van het bestand lezen is geen spoelen.
@@ -242,32 +267,52 @@ class TorrentStream(
         }
         var waited = 0
         dbgWaitPiece = piece
-        while (!handle.havePiece(piece)) {
+        while (!have(piece)) {
             if (closed) throw IOException("Gestopt")
             if (waited > 180_000) throw IOException("Te traag: na 3 minuten nog niets binnen")
-            Thread.sleep(100)
-            waited += 100
+            Thread.sleep(50)
+            waited += 50
             if (waited % 3000 == 0) prioritize(pos)
         }
-        val pieceEndInFile = (piece + 1L) * pieceLength - fileOffset
-        val n = minOf(len.toLong(), pieceEndInFile - pos, size - pos).toInt()
-        if (n <= 0) return -1
+
+        // 3) Buffer vullen: vanaf pos, zo ver als de stukken aaneengesloten binnen zijn (max. 512 KB)
+        val want = minOf(size, pos + cache.size)
+        var availEnd = minOf((piece + 1L) * pieceLength - fileOffset, size)
+        var p = piece + 1
+        while (availEnd < want && p < numPieces && have(p)) {
+            availEnd = minOf((p + 1L) * pieceLength - fileOffset, size)
+            p++
+        }
+        val toRead = (minOf(want, availEnd) - pos).toInt()
+        if (toRead <= 0) return -1
         val r = raf ?: run {
             var tries = 0
-            while (!file.exists() && tries < 50) { Thread.sleep(100); tries++ }
+            while (!file.exists() && tries < 100) { Thread.sleep(50); tries++ }
             RandomAccessFile(file, "r").also { raf = it }
         }
         if (dbgFirstPieceMs < 0) dbgFirstPieceMs = System.currentTimeMillis() - dbgStart
         r.seek(pos)
-        val got = r.read(buf, off, n)
+        var got = 0
+        while (got < toRead) {
+            val k = r.read(cache, got, toRead - got)
+            if (k < 0) break
+            got += k
+        }
+        if (got <= 0) return -1
+        cacheStart = pos
+        cacheLen = got
         if (!started && pos > 3L * 1024 * 1024) { started = true; prioritize(pos) }
         dbgWaitPiece = -1
-        dbgLast = "gelezen $got (bestand ${r.length() / 1_000_000} MB op schijf)"
-        return got
+        dbgFills++
+        dbgLast = "buffer ${dbgFills}× gevuld (${got / 1024} KB)"
+        val n = minOf(len, got)
+        System.arraycopy(cache, 0, buf, off, n)
+        return n
     }
 
     fun debug(): String {
-        val wait = if (dbgWaitPiece >= 0) "wacht op stuk $dbgWaitPiece (heb: ${runCatching { handle.havePiece(dbgWaitPiece) }.getOrDefault(false)})" else "niet aan het wachten"
+        val w = dbgWaitPiece
+        val wait = if (w >= 0) "wacht op stuk $w (heb: ${runCatching { handle.havePiece(w) }.getOrDefault(false)})" else "niet aan het wachten"
         val t = (System.currentTimeMillis() - dbgStart) / 1000
         val first = if (dbgFirstPieceMs >= 0) "eerste stuk na ${dbgFirstPieceMs / 100 / 10.0}s" else "eerste stuk nog niet"
         return "${t}s sinds info binnen · $first · Lezen: ${dbgReads}× · plek ${dbgPos / 1_000_000} MB van ${size / 1_000_000} MB · $wait · $dbgLast · " +
