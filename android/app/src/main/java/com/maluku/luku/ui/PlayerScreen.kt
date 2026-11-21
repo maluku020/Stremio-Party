@@ -190,7 +190,8 @@ fun PlayerScreen(nav: Nav, startStream: StreamItem, info: PlayInfo, race: List<S
             stage = "speler gestart (${subs.size} ondertitels)"
             Players.play(player, t, stream.url, subs, resume)
             if (resume > 0) notice = "Verder vanaf " + formatTime(resume)
-            if (subs.any { it.lang == "nl" }) notice = (notice?.let { "$it · " } ?: "") + "Nederlandse ondertitels gevonden"
+            val langs = listOf("nl" to "NL", "en" to "EN", "es" to "ES").filter { (c, _) -> subs.any { it.lang == c } }.joinToString(", ") { it.second }
+            notice = (notice?.let { "$it · " } ?: "") + if (langs.isEmpty()) "Geen losse ondertitels gevonden" else "Ondertitels gevonden: $langs"
         } catch (e: Exception) {
             error = e.message ?: "Starten mislukt"
         }
