@@ -57,10 +57,7 @@ class TorrentEngine(ctx: Context) {
             sp.setInteger(settings_pack.int_types.connection_speed.swigValue(), 200)
             sp.setInteger(settings_pack.int_types.torrent_connect_boost.swigValue(), 80)
             // Korte wachtrij per deelnemer: een nieuw "dit stuk eerst" is dan meteen aan de beurt
-            sp.setInteger(settings_pack.int_types.request_queue_time.swigValue(), 1)
-            sp.setInteger(settings_pack.int_types.max_out_request_queue.swigValue(), 60)
-            sp.setInteger(settings_pack.int_types.whole_pieces_threshold.swigValue(), 1)
-            sp.setInteger(settings_pack.int_types.piece_timeout.swigValue(), 5)
+            sp.setInteger(settings_pack.int_types.max_out_request_queue.swigValue(), 1500)
             sp.setInteger(settings_pack.int_types.request_timeout.swigValue(), 10)
             sp.setInteger(settings_pack.int_types.peer_connect_timeout.swigValue(), 7)
         }
@@ -186,7 +183,7 @@ class TorrentEngine(ctx: Context) {
         var handle: TorrentHandle? = null
         if (cached != null) {
             status("Torrent-info gevonden…")
-            s.download(cached, dir, null, null, null, TorrentFlags.PAUSED)
+            s.download(cached, dir)
             handle = s.find(cached.infoHash())
             // Ook de trackers van de add-on + openbare trackers toevoegen (meer deelnemers)
             runCatching { for (t in (trackers + PUBLIC_TRACKERS).distinct().take(30)) handle?.addTracker(org.libtorrent4j.AnnounceEntry(t)) }
