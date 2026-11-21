@@ -95,8 +95,19 @@ class TorrentEngine(ctx: Context) {
         val t0 = System.currentTimeMillis()
         status("Torrent zoeken…")
         // Magnet direct toevoegen: de gevonden deelnemers blijven verbonden (sneller dan eerst los de info ophalen)
-        s.download(magnet, dir, TorrentFlags.SEQUENTIAL_DOWNLOAD)
+        // Eerst snel proberen: torrent-info uit een openbaar archief (scheelt soms 10+ s zoeken)
+        val cached = fetchCachedTorrent(infoHash)
         var handle: TorrentHandle? = null
+        if (cached != null) {
+            status("Torrent-info gevonden…")
+            s.download(cached, dir)
+            handle = s.find(cached.infoHash())
+            // Ook de trackers van de add-on + openbare trackers toevoegen (meer deelnemers)
+            runCatching { for (t in (trackers + PUBLIC_TRACKERS).distinct().take(30)) handle?.addTracker(org.libtorrent4j.AnnounceEntry(t)) }
+        } else {
+            // Niet "op volgorde" downloaden: dan negeert de motor onze voorrang (bijv. voor het eind van het bestand)
+            s.download(magnet, dir, org.libtorrent4j.swig.torrent_flags_t())
+        }
         var waited = 0
         while (true) {
             if (handle == null || !handle.isValid) handle = s.find(Sha1Hash.parseHex(infoHash))
@@ -132,7 +143,7 @@ class TorrentEngine(ctx: Context) {
         status("Verbinden met deelnemers…")
         val prios = Array(n) { if (it == idx) Priority.DEFAULT else Priority.IGNORE }
         th.prioritizeFiles(prios)
-        th.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
+        th.unsetFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
         th.resume()
 
         val stream = TorrentStream(
@@ -159,6 +170,25 @@ class TorrentEngine(ctx: Context) {
         runCatching { c.close() }
         // Bestanden weggooien, anders loopt de opslag vol
         runCatching { dir.listFiles()?.forEach { it.deleteRecursively() } }
+    }
+
+    /** Probeert de .torrent op te halen uit een openbaar archief, maximaal ±2,5 s. */
+    private fun fetchCachedTorrent(infoHash: String): TorrentInfo? {
+        val client = com.maluku.luku.data.Net.client.newBuilder()
+            .callTimeout(2500, java.util.concurrent.TimeUnit.MILLISECONDS)
+            .build()
+        val url = "https://itorrents.org/torrent/${infoHash.uppercase()}.torrent"
+        return runCatching {
+            val req = okhttp3.Request.Builder().url(url).header("User-Agent", "Mozilla/5.0").build()
+            client.newCall(req).execute().use { res ->
+                if (!res.isSuccessful) return null
+                val bytes = res.body?.bytes() ?: return null
+                if (bytes.size < 50 || bytes[0] != 'd'.code.toByte()) return null
+                val ti = TorrentInfo.bdecode(bytes)
+                if (!ti.infoHash().toHex().equals(infoHash, ignoreCase = true)) return null
+                ti
+            }
+        }.getOrNull()
     }
 
     private fun gb(b: Long) = String.format("%.1f GB", b / 1e9)
