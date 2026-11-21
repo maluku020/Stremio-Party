@@ -442,6 +442,15 @@ private fun StreamRow(s: StreamItem, freeBytes: Long, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
             Text(s.title, color = Z.dim, fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            val seeds = s.seeders
+            if (s.isTorrent && seeds != null) {
+                val (col, txt) = when {
+                    seeds >= 50 -> Z.good to "snel"
+                    seeds >= 10 -> Color(0xFFFFB347) to "gemiddeld"
+                    else -> Z.bad to "traag"
+                }
+                Text("👤 $seeds delers · $txt", color = col, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
             if (tooBig) Text("Te groot voor de opslag van dit apparaat", color = Z.bad, fontSize = 12.sp)
         }
     }

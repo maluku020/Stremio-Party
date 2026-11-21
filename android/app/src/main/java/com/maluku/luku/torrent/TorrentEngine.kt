@@ -42,6 +42,16 @@ class TorrentEngine(ctx: Context) {
         val sp = SettingsPack()
         runCatching {
             sp.connectionsLimit(300)
+            // DHT-"adresboek": hiermee vindt de motor andere delers (anders vaak maar een paar)
+            sp.setBoolean(settings_pack.bool_types.enable_dht.swigValue(), true)
+            sp.setBoolean(settings_pack.bool_types.enable_lsd.swigValue(), true)
+            sp.setString(
+                settings_pack.string_types.dht_bootstrap_nodes.swigValue(),
+                "dht.libtorrent.org:25401,router.bittorrent.com:6881,router.utorrent.com:6881," +
+                    "dht.transmissionbt.com:6881,router.silotis.us:6881,dht.aelitis.com:6881",
+            )
+            sp.setInteger(settings_pack.int_types.active_downloads.swigValue(), 8)
+            sp.setInteger(settings_pack.int_types.active_limit.swigValue(), 16)
             sp.setBoolean(settings_pack.bool_types.announce_to_all_trackers.swigValue(), true)
             sp.setBoolean(settings_pack.bool_types.announce_to_all_tiers.swigValue(), true)
             sp.setInteger(settings_pack.int_types.connection_speed.swigValue(), 200)
@@ -244,6 +254,9 @@ class TorrentStream(
         return "Lezen: ${dbgReads}× · plek ${dbgPos / 1_000_000} MB van ${size / 1_000_000} MB · $wait · $dbgLast · " +
             "stuk ${pieceLength / 1024} KB, eerste stuk ${pieceAt(0)}, laatste ${pieceAt(size - 1)}"
     }
+
+    /** Totaal binnengehaalde bytes (om vastgelopen bronnen te herkennen). */
+    fun downloaded(): Long = runCatching { handle.status().totalDone() }.getOrDefault(0L)
 
     fun stats(): String = runCatching {
         val st = handle.status()

@@ -52,6 +52,7 @@ fun PlayerScreen(nav: Nav, stream: StreamItem, info: PlayInfo) {
     var notice by remember { mutableStateOf<String?>(null) }
     var showNext by remember { mutableStateOf(false) }
     var debug by remember { mutableStateOf("") }
+    var stalled by remember { mutableStateOf(false) }
     var stage by remember { mutableStateOf("start") }
     var nextBusy by remember { mutableStateOf(false) }
     val next = info.next
@@ -144,6 +145,8 @@ fun PlayerScreen(nav: Nav, stream: StreamItem, info: PlayInfo) {
         var tick = 0
         while (true) {
             torrent?.let { status = it.stats(); debug = it.debug() }
+            // Na 20 s nog niets binnen → deze bron wordt niet (genoeg) gedeeld
+            stalled = torrent != null && tick >= 20 && torrent!!.downloaded() == 0L && player.currentPosition == 0L
             val st = when (player.playbackState) { Player.STATE_IDLE -> "IDLE"; Player.STATE_BUFFERING -> "BUFFERING"; Player.STATE_READY -> "READY"; else -> "ENDED" }
             debug = "Fase: $stage · speler $st · ${player.currentPosition / 1000}s\n" + (torrent?.debug() ?: "gewone link")
             val dur = player.duration
@@ -200,6 +203,21 @@ fun PlayerScreen(nav: Nav, stream: StreamItem, info: PlayInfo) {
             )
         } else if (notice != null) {
             InfoBox(Modifier.align(Alignment.TopStart), info.label, notice!!)
+        }
+
+        if (stalled && error == null) {
+            Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(40.dp)) {
+                    Text("Deze bron komt niet op gang", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Na 20 seconden is er nog niets binnen. Er delen te weinig mensen deze bron. Kies een bron met meer 👤.",
+                        color = Z.dim,
+                        fontSize = 15.sp,
+                        modifier = Modifier.padding(vertical = 14.dp),
+                    )
+                    LukuButton("Andere bron kiezen") { nav.back() }
+                }
+            }
         }
 
         if (showNext && error == null && next != null) {

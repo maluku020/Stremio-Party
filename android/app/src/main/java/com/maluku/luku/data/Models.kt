@@ -126,6 +126,9 @@ data class StreamItem(
             val mult = when (m.groupValues[2]) { "K" -> 1e3; "M" -> 1e6; "G" -> 1e9; else -> 1e12 }
             return (n * mult).toLong()
         }
+    /** Aantal delers (Torrentio zet dit als "👤 123" in de titel). */
+    val seeders: Int? get() = Regex("""👤\s*(\d+)""").find(title)?.groupValues?.get(1)?.toIntOrNull()
+
     val quality: String
         get() {
             val t = "$name $title".uppercase()
