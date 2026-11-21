@@ -61,14 +61,27 @@ fun PlayerScreen(nav: Nav, startStream: StreamItem, info: PlayInfo, race: List<S
     // Na een opdracht van een ander: eigen veranderingen even niet terugsturen
     val suppressUntil = remember { longArrayOf(0L) }
     val loadedOnce = remember { booleanArrayOf(false) }
+    val lastOwnAction = remember { longArrayOf(0L) }
+    val lastGroupCommand = remember { longArrayOf(0L) }
 
     /** Opdracht van de groep uitvoeren (pauze/play/spoelen). */
     fun applyGroup(paused: Boolean, time: Double, action: String, by: String?) {
         if (player.duration == C.TIME_UNSET) return // video nog niet geladen; gebeurt zodra hij klaar is
-        suppressUntil[0] = System.currentTimeMillis() + 1500
-        if (player.playWhenReady == paused) player.playWhenReady = !paused
+        val nowT = System.currentTimeMillis()
+        if (action == "sync") {
+            // Het regelmatige "hier ben ik" van de host niet gebruiken vlak na een eigen actie
+            // (anders trekt een oud bericht je terug naar waar je net vandaan spoelde), en niet tijdens laden.
+            if (nowT - lastOwnAction[0] < 8000) return
+            if (player.playbackState == Player.STATE_BUFFERING) return
+        } else {
+            lastGroupCommand[0] = nowT
+        }
         val diff = kotlin.math.abs(player.currentPosition / 1000.0 - time)
-        if ((action == "sync" && diff > 3) || (action != "sync" && diff > 1.5)) player.seekTo((time * 1000).toLong())
+        val needPause = player.playWhenReady == paused
+        val needSeek = (action == "sync" && diff > 3) || (action != "sync" && diff > 1.5)
+        if (needPause || needSeek) suppressUntil[0] = nowT + 1500
+        if (needPause) player.playWhenReady = !paused
+        if (needSeek) player.seekTo((time * 1000).toLong())
         if (by != null) {
             val label = when (action) { "pause" -> "heeft gepauzeerd ⏸"; "play" -> "drukte op play ▶️"; "seek" -> "heeft gespoeld ⏩"; else -> null }
             if (label != null) party.notice = "$by $label"
@@ -82,6 +95,7 @@ fun PlayerScreen(nav: Nav, startStream: StreamItem, info: PlayInfo, race: List<S
             party.notice = "Alleen de host bedient nu"
             return
         }
+        lastOwnAction[0] = System.currentTimeMillis()
         party.sendPlayback(!player.playWhenReady, player.currentPosition / 1000.0, action)
     }
 
@@ -209,7 +223,8 @@ fun PlayerScreen(nav: Nav, startStream: StreamItem, info: PlayInfo, race: List<S
             showNext = next != null && dur != C.TIME_UNSET && dur > 0 && dur - player.currentPosition < 90_000
             // Host geeft elke 5 s door waar hij is, zodat iedereen gelijk blijft lopen
             if (party.active && party.amHost && tick % 5 == 4 && loadedOnce[0] && player.playbackState == Player.STATE_READY &&
-                System.currentTimeMillis() > suppressUntil[0]
+                System.currentTimeMillis() > suppressUntil[0] && System.currentTimeMillis() - lastGroupCommand[0] > 8000 &&
+                System.currentTimeMillis() - lastOwnAction[0] > 3000
             ) party.sendPlayback(!player.playWhenReady, player.currentPosition / 1000.0, "sync")
             if (tick % 15 == 14) {
                 val nowT = System.currentTimeMillis()
