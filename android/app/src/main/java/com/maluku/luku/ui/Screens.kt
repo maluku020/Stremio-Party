@@ -24,7 +24,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -378,6 +377,16 @@ fun SettingsScreen(nav: Nav) {
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 30.dp)) {
         item {
             TopBar(nav, "Instellingen")
+            SectionTitle("Taal")
+            androidx.compose.foundation.layout.Row {
+                listOf("nl" to "🇳🇱 Nederlands", "en" to "🇬🇧 English", "es" to "🇪🇸 Español").forEach { (code, label) ->
+                    Chip(label, I18n.lang == code) {
+                        I18n.lang = code
+                        app.prefs.lang = code
+                    }
+                    Spacer(Modifier.width(8.dp))
+                }
+            }
             SectionTitle("Account")
             Text(
                 app.prefs.email?.let { "Ingelogd als $it" } ?: "Zonder account (alleen Cinemeta + zelf toegevoegde add-ons)",

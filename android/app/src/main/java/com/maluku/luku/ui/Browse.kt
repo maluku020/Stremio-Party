@@ -28,7 +28,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -358,7 +357,7 @@ fun CalendarScreen(nav: Nav) {
             list.isEmpty() -> Text("Geen afleveringen in deze periode. Zet series in je bibliotheek om ze hier te zien.", color = Z.dim)
             else -> {
                 val today = startOfDay(System.currentTimeMillis())
-                val dayFmt = SimpleDateFormat("EEEE d MMMM", Locale("nl", "NL"))
+                val dayFmt = SimpleDateFormat("EEEE d MMMM", I18n.locale)
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
                     list.groupBy { it.day }.forEach { (day, rows) ->
                         item(key = "d$day") {

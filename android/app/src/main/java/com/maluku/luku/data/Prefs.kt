@@ -29,6 +29,10 @@ class Prefs(ctx: Context) {
         get() = sp.getString("addonCache", null)
         set(v) = sp.edit().putString("addonCache", v).apply()
 
+    var lang: String
+        get() = sp.getString("lang", "nl") ?: "nl"
+        set(v) = sp.edit().putString("lang", v).apply()
+
     var partyName: String
         get() = sp.getString("partyName", "") ?: ""
         set(v) = sp.edit().putString("partyName", v).apply()

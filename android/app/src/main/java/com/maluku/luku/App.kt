@@ -17,6 +17,7 @@ class App : Application() {
         super.onCreate()
         instance = this
         prefs = Prefs(this)
+        com.maluku.luku.ui.I18n.lang = prefs.lang
         stremio = StremioRepo(prefs)
         torrents = TorrentEngine(this)
         library = Library(this, stremio)
