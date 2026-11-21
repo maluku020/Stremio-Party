@@ -110,6 +110,11 @@ private fun DetailContent(nav: Nav, m: Meta) {
     val inLib = lib?.inLibrary == true
     val toggleLib = { app.library.toggleLibrary(MetaPreview(m.id, m.type, m.name, m.poster, m.year)) }
     val seasonEpisodes = m.videos.filter { it.season == season }
+    // Films: bronnen meteen op de infopagina, zoals Stremio
+    val (movieStreams, streamsDone) = if (!isSeries) rememberStreams(m.type, m.id) else (emptyList<StreamItem>() to true)
+    val movieInfo = infoFor(m.id, m.name)
+    val resumeMs = if (!isSeries) app.library.resumeFor(m.id, m.id) else 0L
+    val free = remember { app.torrents.freeBytes() }
 
     Box(Modifier.fillMaxSize().background(Z.bg)) {
         if (wide) {
@@ -129,8 +134,24 @@ private fun DetailContent(nav: Nav, m: Meta) {
                     item {
                         Spacer(Modifier.height(20.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            LukuButton(playLabel, onClick = playAction)
+                            if (isSeries) LukuButton(playLabel, onClick = playAction)
                             LukuButton(if (inLib) "✓  In bibliotheek" else "＋  Bibliotheek", primary = false, onClick = toggleLib)
+                        }
+                        if (resumeMs > 1000) Text("Je gaat verder vanaf ${formatTime(resumeMs)}", color = Z.dim, modifier = Modifier.padding(top = 10.dp))
+                    }
+                }
+                if (!isSeries) {
+                    Spacer(Modifier.width(24.dp))
+                    Column(
+                        Modifier.width(480.dp).fillMaxHeight()
+                            .background(Z.panel.copy(alpha = 0.92f), RoundedCornerShape(18.dp))
+                            .padding(16.dp),
+                    ) {
+                        Text("Bronnen", color = Z.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(10.dp))
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(movieStreams) { st -> StreamRow(st, free) { nav.go(Screen.Player(st, movieInfo)) } }
+                            item { StreamsFooter(movieStreams.isEmpty(), streamsDone) }
                         }
                     }
                 }
@@ -178,7 +199,14 @@ private fun DetailContent(nav: Nav, m: Meta) {
                         InfoBlock(m, maxDesc = 5, center = true)
                         Spacer(Modifier.height(18.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            LukuButton(playLabel, modifier = Modifier.weight(1f), onClick = playAction)
+                            if (isSeries) {
+                                LukuButton(playLabel, modifier = Modifier.weight(1f), onClick = playAction)
+                            } else {
+                                Column(Modifier.weight(1f)) {
+                                    Text("Bronnen", color = Z.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                    if (resumeMs > 1000) Text("Je gaat verder vanaf ${formatTime(resumeMs)}", color = Z.dim, fontSize = 13.sp)
+                                }
+                            }
                             Box(
                                 Modifier.size(48.dp).tv(RoundedCornerShape(12.dp), toggleLib)
                                     .background(if (inLib) Z.accent else Z.panel2, RoundedCornerShape(12.dp)),
@@ -186,6 +214,15 @@ private fun DetailContent(nav: Nav, m: Meta) {
                             ) { Text(if (inLib) "✓" else "＋", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
                         }
                     }
+                }
+                if (!isSeries) {
+                    item { Spacer(Modifier.height(10.dp)) }
+                    items(movieStreams) { st ->
+                        Box(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
+                            StreamRow(st, free) { nav.go(Screen.Player(st, movieInfo)) }
+                        }
+                    }
+                    item { Box(Modifier.padding(horizontal = 18.dp)) { StreamsFooter(movieStreams.isEmpty(), streamsDone) } }
                 }
                 if (isSeries) {
                     item {
@@ -208,6 +245,17 @@ private fun DetailContent(nav: Nav, m: Meta) {
             seasonPicker = false
         }
     }
+}
+
+@Composable
+private fun StreamsFooter(empty: Boolean, done: Boolean) {
+    val text = when {
+        !done && empty -> "Bronnen zoeken bij je add-ons…"
+        !done -> "Meer bronnen laden…"
+        empty -> "Geen bronnen gevonden. Heb je een add-on met bronnen (zoals Torrentio) in je Stremio-account?"
+        else -> null
+    }
+    if (text != null) Text(text, color = Z.dim, fontSize = 14.sp, modifier = Modifier.padding(vertical = 12.dp))
 }
 
 private fun seasonLabel(s: Int) = if (s == 0) "Extra's" else "Seizoen $s"
@@ -325,13 +373,8 @@ fun StreamsScreen(nav: Nav, info: PlayInfo) {
     val id = info.videoId
     val title = info.label
     val app = App.instance
-    var streams by remember(id) { mutableStateOf<List<StreamItem>?>(null) }
     var retry by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(id, retry) {
-        streams = null
-        streams = runCatching { app.stremio.streams(type, id) }.getOrDefault(emptyList())
-    }
+    val (found, done) = rememberStreams(type, id, retry)
 
     Column(Modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -343,20 +386,35 @@ fun StreamsScreen(nav: Nav, info: PlayInfo) {
             }
         }
         Spacer(Modifier.height(12.dp))
-        val list = streams
         when {
-            list == null -> Loading("Bronnen zoeken bij je add-ons…")
-            list.isEmpty() -> ErrorBox(
+            found.isEmpty() && !done -> Loading("Bronnen zoeken bij je add-ons…")
+            found.isEmpty() -> ErrorBox(
                 "Geen bronnen gevonden. Heb je een add-on met bronnen (zoals Torrentio) in je Stremio-account?",
             ) { retry++ }
             else -> {
-                val free = app.torrents.freeBytes()
+                val free = remember { app.torrents.freeBytes() }
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
-                    items(list) { s -> StreamRow(s, free) { nav.go(Screen.Player(s, info)) } }
+                    items(found) { s -> StreamRow(s, free) { nav.go(Screen.Player(s, info)) } }
+                    if (!done) item { Text("Meer bronnen laden…", color = Z.dim, fontSize = 13.sp, modifier = Modifier.padding(8.dp)) }
                 }
             }
         }
     }
+}
+
+/** Bronnen ophalen: elke add-on verschijnt zodra hij antwoordt (zoals Stremio). */
+@Composable
+private fun rememberStreams(type: String, id: String, retry: Int = 0): Pair<List<StreamItem>, Boolean> {
+    val app = App.instance
+    var list by remember(id, retry) { mutableStateOf<List<StreamItem>>(emptyList()) }
+    var done by remember(id, retry) { mutableStateOf(false) }
+    LaunchedEffect(id, retry) {
+        list = emptyList()
+        done = false
+        runCatching { app.stremio.streamsProgressive(type, id) { chunk -> list = list + chunk } }
+        done = true
+    }
+    return list to done
 }
 
 @Composable

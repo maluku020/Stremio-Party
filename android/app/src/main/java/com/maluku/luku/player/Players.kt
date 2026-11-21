@@ -25,7 +25,7 @@ object Players {
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
         val load = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(15_000, 60_000, 2_500, 5_000)
+            .setBufferDurationsMs(10_000, 60_000, 1_000, 3_000)
             .build()
         val player = ExoPlayer.Builder(ctx, renderers)
             .setLoadControl(load)

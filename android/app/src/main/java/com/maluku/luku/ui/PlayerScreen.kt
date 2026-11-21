@@ -128,7 +128,8 @@ fun PlayerScreen(nav: Nav, stream: StreamItem, info: PlayInfo) {
             }
             status = "Bufferen…"
             stage = "ondertitels ophalen"
-            val subs = subsJob.await()
+            val subs = withTimeoutOrNull(1_500) { subsJob.await() } ?: emptyList<SubtitleItem>()
+            if (!subsJob.isCompleted) subsJob.cancel()
             stage = "speler gestart (${subs.size} ondertitels)"
             Players.play(player, t, stream.url, subs, resume)
             if (resume > 0) notice = "Verder vanaf " + formatTime(resume)

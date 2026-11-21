@@ -3,6 +3,7 @@ package com.maluku.luku.data
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
@@ -174,6 +175,25 @@ class StremioRepo(private val prefs: Prefs) {
                 } ?: emptyList()
             }
         }.awaitAll().flatten()
+    }
+
+    /**
+     * Zoals [streams], maar geeft de bronnen van elke add-on door zodra die antwoordt
+     * (zoals Stremio), in plaats van te wachten op de traagste.
+     */
+    suspend fun streamsProgressive(type: String, id: String, onChunk: (List<StreamItem>) -> Unit) = coroutineScope {
+        addons.filter { it.supports("stream", type, id) }.forEach { a ->
+            launch {
+                val list = withTimeoutOrNull(25_000) {
+                    runCatching {
+                        val json = Net.getJson("${a.base}/stream/$type/${id}.json")
+                        val arr = json.optJSONArray("streams") ?: JSONArray()
+                        (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.let { o -> parseStream(a.name, o) } }
+                    }.getOrNull()
+                }
+                if (!list.isNullOrEmpty()) onChunk(list)
+            }
+        }
     }
 
     /** Ondertitels van alle add-ons die "subtitles" aanbieden (bijv. OpenSubtitles). Nederlands eerst. */

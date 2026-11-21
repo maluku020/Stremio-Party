@@ -6,6 +6,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.libtorrent4j.Priority
 import org.libtorrent4j.SessionManager
+import org.libtorrent4j.SessionParams
+import org.libtorrent4j.SettingsPack
+import org.libtorrent4j.swig.settings_pack
 import org.libtorrent4j.Sha1Hash
 import org.libtorrent4j.TorrentFlags
 import org.libtorrent4j.TorrentHandle
@@ -35,7 +38,19 @@ class TorrentEngine(ctx: Context) {
     private fun session(): SessionManager {
         session?.let { return it }
         val s = SessionManager(false)
-        s.start()
+        // Instellingen voor snel streamen (standaard is libtorrent voorzichtig)
+        val sp = SettingsPack()
+        runCatching {
+            sp.connectionsLimit(300)
+            sp.setBoolean(settings_pack.bool_types.announce_to_all_trackers.swigValue(), true)
+            sp.setBoolean(settings_pack.bool_types.announce_to_all_tiers.swigValue(), true)
+            sp.setInteger(settings_pack.int_types.connection_speed.swigValue(), 200)
+            sp.setInteger(settings_pack.int_types.torrent_connect_boost.swigValue(), 80)
+            sp.setInteger(settings_pack.int_types.max_out_request_queue.swigValue(), 1500)
+            sp.setInteger(settings_pack.int_types.request_timeout.swigValue(), 10)
+            sp.setInteger(settings_pack.int_types.peer_connect_timeout.swigValue(), 7)
+        }
+        s.start(SessionParams(sp))
         session = s
         return s
     }
@@ -61,7 +76,8 @@ class TorrentEngine(ctx: Context) {
         val s = session()
         val magnet = buildString {
             append("magnet:?xt=urn:btih:").append(infoHash)
-            for (t in trackers.take(20)) append("&tr=").append(URLEncoder.encode(t, "UTF-8"))
+            // Trackers van de add-on + bekende openbare trackers: sneller deelnemers vinden
+            for (t in (trackers + PUBLIC_TRACKERS).distinct().take(30)) append("&tr=").append(URLEncoder.encode(t, "UTF-8"))
         }
         status("Torrent zoeken…")
         // Magnet direct toevoegen: de gevonden deelnemers blijven verbonden (sneller dan eerst los de info ophalen)
@@ -133,6 +149,19 @@ class TorrentEngine(ctx: Context) {
 
     private fun gb(b: Long) = String.format("%.1f GB", b / 1e9)
 }
+
+private val PUBLIC_TRACKERS = listOf(
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://open.demonii.com:1337/announce",
+    "udp://open.stealth.si:80/announce",
+    "udp://tracker.torrent.eu.org:451/announce",
+    "udp://exodus.desync.com:6969/announce",
+    "udp://explodie.org:6969/announce",
+    "udp://tracker.openbittorrent.com:6969/announce",
+    "udp://tracker.dler.org:6969/announce",
+    "udp://open.tracker.cl:1337/announce",
+    "https://tracker.tamersunion.org:443/announce",
+)
 
 class TorrentStream(
     val handle: TorrentHandle,
