@@ -146,7 +146,6 @@ class TorrentEngine(ctx: Context) {
         )
         // Begin en eind van het bestand eerst (daar staat de info die de speler nodig heeft)
         stream.prioritize(0)
-        stream.prioritizeTail()
         current = stream
         stream
     }
@@ -206,18 +205,20 @@ class TorrentStream(
     @Volatile private var started = false
 
     /**
-     * Geeft de stukken vanaf [pos] voorrang. Het stuk dat de speler NU nodig heeft krijgt deadline 0,
-     * de volgende een oplopende deadline. Vóór het eerste beeld een klein venster (±4 MB),
-     * daarna ±32 MB vooruit.
+     * Geeft de stukken vanaf [pos] voorrang, STRIKT op volgorde: het stuk dat de speler nu nodig heeft
+     * krijgt deadline 0, de volgende pas veel later. Zo haalt de motor één stuk helemaal binnen
+     * in plaats van vier stukken half. Vóór het eerste beeld: alleen dit stuk + 1 reserve.
+     * Daarna (als het beeld loopt): ±32 MB vooruit.
      */
     fun prioritize(pos: Long) {
         val first = pieceAt(pos)
-        val bytes = if (started) 32L * 1024 * 1024 else 4L * 1024 * 1024
-        val window = (bytes / pieceLength).toInt().coerceIn(3, 80)
+        val window = if (started) (32L * 1024 * 1024 / pieceLength).toInt().coerceIn(4, 80) else 2
         for (i in 0 until window) {
             val p = first + i
             if (p >= numPieces) break
-            if (!handle.havePiece(p)) handle.setPieceDeadline(p, if (i == 0) 0 else 150 + i * 120)
+            if (!handle.havePiece(p)) {
+                handle.setPieceDeadline(p, if (i == 0) 0 else if (started) 1500 + i * 400 else 4000)
+            }
         }
     }
 
