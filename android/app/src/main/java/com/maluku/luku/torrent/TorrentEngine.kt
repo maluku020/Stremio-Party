@@ -90,7 +90,89 @@ class TorrentEngine(ctx: Context) {
         status: (String) -> Unit,
     ): TorrentStream = withContext(Dispatchers.IO) {
         stop()
+        val st = prepare(session(), infoHash, fileIdx, trackers, File(dir, infoHash).apply { mkdirs() }, status, true)
+        current = st
+        st
+    }
+
+    /** Bronnen waarvan de race al verloren is: hun voorbereiding stopt meteen. */
+    private val aborted = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    /**
+     * Race: start meerdere bronnen tegelijk. De bron die als eerste het begin van de film binnen heeft, wint;
+     * de andere worden meteen gestopt en hun bestanden verwijderd.
+     * Geeft (index van de winnaar, stream) terug.
+     */
+    suspend fun openRace(
+        cands: List<Triple<String, Int?, List<String>>>,
+        status: (String) -> Unit,
+    ): Pair<Int, TorrentStream> = withContext(Dispatchers.IO) {
+        stop()
         val s = session()
+        aborted.clear()
+        val streams = arrayOfNulls<TorrentStream>(cands.size)
+        val failed = BooleanArray(cands.size)
+        val threads = cands.mapIndexed { i, c ->
+            Thread {
+                try {
+                    val st = prepare(s, c.first, c.second, c.third, File(dir, c.first).apply { mkdirs() }, {}, i == 0)
+                    if (c.first in aborted) dropStream(s, st, c.first) else streams[i] = st
+                } catch (e: Exception) {
+                    failed[i] = true
+                }
+            }.apply { start() }
+        }
+        var winner = -1
+        var waited = 0
+        while (winner < 0) {
+            for (i in cands.indices) {
+                val st = streams[i] ?: continue
+                if (st.startReady()) { winner = i; break }
+            }
+            if (winner >= 0) break
+            if (failed.all { it }) throw IOException("Geen van de bronnen kwam op gang. Probeer een andere bron.")
+            if (waited > 120_000) throw IOException("Na 2 minuten had geen enkele bron het begin van de film binnen.")
+            status("🏁 Race: " + cands.indices.joinToString(" · ") { i ->
+                when {
+                    failed[i] -> "${i + 1}: ✗"
+                    streams[i] == null -> "${i + 1}: zoeken…"
+                    else -> "${i + 1}: " + streams[i]!!.shortStats()
+                }
+            })
+            Thread.sleep(250)
+            waited += 250
+        }
+        // Verliezers stoppen en opruimen
+        for (i in cands.indices) {
+            if (i == winner) continue
+            aborted += cands[i].first
+            streams[i]?.let { dropStream(s, it, cands[i].first) }
+        }
+        threads.forEach { runCatching { it.join(50) } }
+        status("🏁 Bron ${winner + 1} won!")
+        val win = streams[winner]!!
+        current = win
+        winner to win
+    }
+
+    private fun dropStream(s: SessionManager, st: TorrentStream, hash: String) {
+        st.closed = true
+        runCatching { s.remove(st.handle) }
+        runCatching { st.close() }
+        Thread { Thread.sleep(1500); runCatching { File(dir, hash).deleteRecursively() } }.start()
+    }
+
+    /** Eén bron voorbereiden: info ophalen, bestand kiezen, prioriteiten zetten en starten. Blokkeert. */
+    private fun prepare(
+        s: SessionManager,
+        infoHash: String,
+        fileIdx: Int?,
+        trackers: List<String>,
+        saveDir: File,
+        status: (String) -> Unit,
+        recordMeta: Boolean,
+    ): TorrentStream {
+        val dir = saveDir
         val magnet = buildString {
             append("magnet:?xt=urn:btih:").append(infoHash)
             // Trackers van de add-on + bekende openbare trackers: sneller deelnemers vinden
@@ -117,6 +199,10 @@ class TorrentEngine(ctx: Context) {
             if (handle == null || !handle.isValid) handle = s.find(Sha1Hash.parseHex(infoHash))
             val h = handle
             if (h != null && h.isValid && h.status().hasMetadata()) break
+            if (infoHash in aborted) {
+                runCatching { if (h != null) s.remove(h) }
+                throw IOException("Race verloren")
+            }
             if (waited >= 60_000) {
                 runCatching { if (h != null) s.remove(h) }
                 throw IOException("Geen mensen gevonden die deze film delen. Kies een andere bron.")
@@ -127,7 +213,7 @@ class TorrentEngine(ctx: Context) {
             Thread.sleep(100)
             waited += 100
         }
-        metaSeconds = (System.currentTimeMillis() - t0) / 1000.0
+        if (recordMeta) metaSeconds = (System.currentTimeMillis() - t0) / 1000.0
         val th: TorrentHandle = handle!!
         val ti: TorrentInfo = th.torrentFile()
         val fs = ti.files()
@@ -168,8 +254,7 @@ class TorrentEngine(ctx: Context) {
         // Begin en eind van het bestand eerst (daar staat de info die de speler nodig heeft)
         stream.prioritize(0)
         th.resume() // pas nu starten: de prioriteiten staan goed, dus de rij vult zich meteen met de juiste stukken
-        current = stream
-        stream
+        return stream
     }
 
     @Synchronized
@@ -181,6 +266,7 @@ class TorrentEngine(ctx: Context) {
         runCatching { c.close() }
         // Bestanden weggooien, anders loopt de opslag vol
         runCatching { dir.listFiles()?.forEach { it.deleteRecursively() } }
+        aborted.clear()
     }
 
     /** Probeert de .torrent op te halen uit een openbaar archief, maximaal ±2,5 s. */
@@ -376,6 +462,15 @@ class TorrentStream(
         return "${t}s sinds info binnen · $first · $extra" + "Lezen: ${dbgReads}× · plek ${dbgPos / 1_000_000} MB van ${size / 1_000_000} MB · $wait · $dbgLast · " +
             "stuk ${pieceLength / 1024} KB, eerste stuk ${pieceAt(0)}, laatste ${pieceAt(size - 1)}"
     }
+
+    /** Heeft deze bron het begin van de film binnen? (voor de race) */
+    fun startReady(): Boolean = runCatching { handle.havePiece(pieceAt(0)) }.getOrDefault(false)
+
+    fun shortStats(): String = runCatching {
+        val st = handle.status()
+        val kb = st.downloadPayloadRate() / 1024
+        "${st.numPeers()}👥 " + if (kb > 1024) String.format("%.1fMB/s", kb / 1024.0) else "${kb}KB/s"
+    }.getOrDefault("…")
 
     /** Totaal binnengehaalde bytes (om vastgelopen bronnen te herkennen). */
     fun downloaded(): Long = runCatching { handle.status().totalDone() }.getOrDefault(0L)

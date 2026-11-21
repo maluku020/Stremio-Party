@@ -40,7 +40,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
-fun PlayerScreen(nav: Nav, stream: StreamItem, info: PlayInfo) {
+fun PlayerScreen(nav: Nav, startStream: StreamItem, info: PlayInfo, race: List<StreamItem> = emptyList()) {
+    // Bij een race weten we pas na het starten welke bron gewonnen heeft
+    var stream by remember { mutableStateOf(startStream) }
     val ctx = LocalContext.current
     val app = App.instance
     val scope = rememberCoroutineScope()
@@ -112,7 +114,7 @@ fun PlayerScreen(nav: Nav, stream: StreamItem, info: PlayInfo) {
         }
     }
 
-    LaunchedEffect(stream) {
+    LaunchedEffect(startStream) {
         try {
             val resume = app.library.resumeFor(info.metaId, info.videoId).let { if (it < 5_000) 0L else it }
             // Ondertitels tegelijk ophalen, terwijl de torrent start
@@ -123,7 +125,14 @@ fun PlayerScreen(nav: Nav, stream: StreamItem, info: PlayInfo) {
                 } ?: emptyList<SubtitleItem>()
             }
             var t: TorrentStream? = null
-            if (stream.isTorrent) {
+            if (race.size > 1) {
+                stage = "race met ${race.size} bronnen"
+                val (wi, won) = app.torrents.openRace(race.map { Triple(it.infoHash!!, it.fileIdx, it.trackers) }) { status = it }
+                stream = race[wi]
+                t = won
+                torrent = won
+                notice = "🏁 Bron ${wi + 1} was het snelst"
+            } else if (stream.isTorrent) {
                 t = app.torrents.open(stream.infoHash!!, stream.fileIdx, stream.trackers) { status = it }
                 torrent = t
             }

@@ -46,7 +46,7 @@ sealed class Screen {
     ) : Screen()
     data class Detail(val type: String, val id: String) : Screen()
     data class Streams(val info: PlayInfo) : Screen()
-    data class Player(val stream: StreamItem, val info: PlayInfo) : Screen()
+    data class Player(val stream: StreamItem, val info: PlayInfo, val race: List<StreamItem> = emptyList()) : Screen()
 }
 
 class Nav(start: Screen) {
@@ -87,7 +87,7 @@ fun AppRoot() {
                 is Screen.CatalogAll -> CatalogAllScreen(nav, screen.catalog, screen.filters, screen.title)
                 is Screen.Detail -> DetailScreen(nav, screen.type, screen.id)
                 is Screen.Streams -> StreamsScreen(nav, screen.info)
-                is Screen.Player -> PlayerScreen(nav, screen.stream, screen.info)
+                is Screen.Player -> PlayerScreen(nav, screen.stream, screen.info, screen.race)
             }
         }
     }

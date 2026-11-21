@@ -150,7 +150,7 @@ private fun DetailContent(nav: Nav, m: Meta) {
                         Text("Bronnen", color = Z.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(10.dp))
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            item { FastestButton(movieStreams) { nav.go(Screen.Player(it, movieInfo)) } }
+                            item { FastestButton(movieStreams, onRace = { top -> nav.go(Screen.Player(top.first(), movieInfo, top)) }) { nav.go(Screen.Player(it, movieInfo)) } }
                             items(movieStreams) { st -> StreamRow(st, free) { nav.go(Screen.Player(st, movieInfo)) } }
                             item { StreamsFooter(movieStreams.isEmpty(), streamsDone) }
                         }
@@ -218,7 +218,7 @@ private fun DetailContent(nav: Nav, m: Meta) {
                 }
                 if (!isSeries) {
                     item { Spacer(Modifier.height(10.dp)) }
-                    item { Box(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) { FastestButton(movieStreams) { nav.go(Screen.Player(it, movieInfo)) } } }
+                    item { Box(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) { FastestButton(movieStreams, onRace = { top -> nav.go(Screen.Player(top.first(), movieInfo, top)) }) { nav.go(Screen.Player(it, movieInfo)) } } }
                     items(movieStreams) { st ->
                         Box(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
                             StreamRow(st, free) { nav.go(Screen.Player(st, movieInfo)) }
@@ -396,7 +396,7 @@ fun StreamsScreen(nav: Nav, info: PlayInfo) {
             else -> {
                 val free = remember { app.torrents.freeBytes() }
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
-                    item { FastestButton(found) { nav.go(Screen.Player(it, info)) } }
+                    item { FastestButton(found, onRace = { top -> nav.go(Screen.Player(top.first(), info, top)) }) { nav.go(Screen.Player(it, info)) } }
                     items(found) { s -> StreamRow(s, free) { nav.go(Screen.Player(s, info)) } }
                     if (!done) item { Text("Meer bronnen laden…", color = Z.dim, fontSize = 13.sp, modifier = Modifier.padding(8.dp)) }
                 }
@@ -406,10 +406,12 @@ fun StreamsScreen(nav: Nav, info: PlayInfo) {
 }
 
 /** Kiest de bron die waarschijnlijk het snelst start: veel delers, niet te groot, liefst geen 4K. */
-fun bestStream(list: List<StreamItem>): StreamItem? {
-    val torrents = list.filter { it.isTorrent && it.seeders != null }
-    if (torrents.isEmpty()) return null
-    return torrents.maxByOrNull { s ->
+fun bestStream(list: List<StreamItem>): StreamItem? = rankStreams(list).firstOrNull()
+
+/** Bronnen gesorteerd op verwachte startsnelheid (elke torrent maar één keer). */
+fun rankStreams(list: List<StreamItem>): List<StreamItem> {
+    val torrents = list.filter { it.isTorrent && it.seeders != null }.distinctBy { it.infoHash }
+    return torrents.sortedByDescending { s ->
         val seeds = (s.seeders ?: 0).toDouble()
         val size = s.sizeBytes ?: 2_000_000_000L
         val sizeFactor = when {
@@ -423,10 +425,17 @@ fun bestStream(list: List<StreamItem>): StreamItem? {
 }
 
 @Composable
-private fun FastestButton(list: List<StreamItem>, onPick: (StreamItem) -> Unit) {
-    val best = remember(list.size) { bestStream(list) } ?: return
+private fun FastestButton(list: List<StreamItem>, onRace: ((List<StreamItem>) -> Unit)? = null, onPick: (StreamItem) -> Unit) {
+    val ranked = remember(list.size) { rankStreams(list) }
+    val best = ranked.firstOrNull() ?: return
     val info = listOfNotNull(best.seeders?.let { "👤 $it" }, best.quality.ifBlank { null }, best.sizeText).joinToString(" · ")
-    LukuButton("⚡  Snelste bron  ($info)", modifier = Modifier.fillMaxWidth()) { onPick(best) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LukuButton("⚡  Snelste bron  ($info)", modifier = Modifier.fillMaxWidth()) { onPick(best) }
+        if (onRace != null && ranked.size >= 2) {
+            val top = ranked.take(3)
+            LukuButton("🏁  Race: ${top.size} beste bronnen tegelijk, snelste wint", primary = false, modifier = Modifier.fillMaxWidth()) { onRace(top) }
+        }
+    }
 }
 
 /** Bronnen ophalen: elke add-on verschijnt zodra hij antwoordt (zoals Stremio). */
