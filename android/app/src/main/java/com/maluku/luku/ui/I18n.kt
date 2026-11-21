@@ -245,7 +245,10 @@ private val WORDS: Map<String, Pair<String, String>> = mapOf(
     "Verbinden…" to ("Connecting…" to "Conectando…"),
     "🎉  Party maken" to ("🎉  Create party" to "🎉  Crear fiesta"),
     "Meedoen met een code" to ("Join with a code" to "Unirse con un código"),
-    "Code, bijv. B4QD" to ("Code, e.g. B4QD" to "Código, p. ej. B4QD"),
+    "Code, bijv. B4QD of PAPA" to ("Code, e.g. B4QD or PAPA" to "Código, p. ej. B4QD o PAPA"),
+    "Eigen code (mag leeg, bijv. PAPA)" to ("Own code (optional, e.g. PAPA)" to "Código propio (opcional, p. ej. PAPA)"),
+    "Eigen code moet 3 tot 12 letters of cijfers zijn" to ("Own code must be 3 to 12 letters or digits" to "El código debe tener de 3 a 12 letras o números"),
+    "Deze code is al in gebruik. Kies een andere." to ("This code is already in use. Pick another one." to "Este código ya está en uso. Elige otro."),
     "Meedoen" to ("Join" to "Unirse"),
     "Verbinden met de party-server… De eerste keer kan dit tot 30 seconden duren (de server wordt dan wakker)." to
         ("Connecting to the party server… The first time this can take up to 30 seconds (the server is waking up)." to "Conectando con el servidor… La primera vez puede tardar hasta 30 segundos (el servidor se está despertando)."),

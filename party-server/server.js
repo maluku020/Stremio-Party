@@ -91,7 +91,20 @@ const handle = (ws, msg) => {
     const member = ws.member;
     switch (msg.type) {
         case 'create': {
-            const code = makeCode();
+            let code = makeCode();
+            // Eigen code (bijv. "PAPA"): alleen letters en cijfers, 3 tot 12 tekens
+            if (msg.code) {
+                const own = String(msg.code).toUpperCase().replace(/[^A-Z0-9]/g, '');
+                if (own.length < 3 || own.length > 12) {
+                    send(ws, { type: 'error', text: 'Eigen code moet 3 tot 12 letters of cijfers zijn' });
+                    return;
+                }
+                if (rooms.has(own) || rooms.has('MLK-' + own)) {
+                    send(ws, { type: 'error', text: 'Deze code is al in gebruik. Kies een andere.' });
+                    return;
+                }
+                code = own;
+            }
             const newRoom = { code, members: new Map(), hostId: null, hostOnly: false, path: null, playback: null };
             rooms.set(code, newRoom);
             join(ws, newRoom, msg.name);
@@ -99,7 +112,9 @@ const handle = (ws, msg) => {
         }
         case 'join': {
             const code = String(msg.code || '').trim().toUpperCase();
-            const target = rooms.get(code) || rooms.get('MLK-' + code);
+            const bare = code.replace(/[^A-Z0-9]/g, '');
+            const target = rooms.get(code) || rooms.get(bare) || rooms.get('MLK-' + bare) ||
+                (bare.startsWith('MLK') ? rooms.get('MLK-' + bare.slice(3)) : undefined);
             if (!target) {
                 send(ws, { type: 'error', text: 'Party niet gevonden. Klopt de code?' });
                 return;

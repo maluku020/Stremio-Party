@@ -73,11 +73,14 @@ class Party {
     private var retry = 0
     private val queue = mutableListOf<JSONObject>()
 
-    fun create(myName: String) {
+    fun create(myName: String, ownCode: String = "") {
         name = myName.ifBlank { "Gast" }
         wantRoom = true
         error = null
-        send(JSONObject().put("type", "create").put("name", name))
+        val msg = JSONObject().put("type", "create").put("name", name)
+        val own = ownCode.uppercase().filter { it.isLetterOrDigit() }
+        if (own.isNotEmpty()) msg.put("code", own)
+        send(msg)
     }
 
     fun join(joinCode: String, myName: String) {
@@ -88,7 +91,7 @@ class Party {
         // Streepje en "MLK" mogen weg: "b4qd", "mlkb4qd" en "MLK-B4QD" werken allemaal
         val raw = joinCode.uppercase().filter { it.isLetterOrDigit() }
         val core = if (raw.length == 7 && raw.startsWith("MLK")) raw.drop(3) else raw
-        pendingCode = if (core.length == 4) "MLK-$core" else joinCode.trim().uppercase()
+        pendingCode = core
         send(JSONObject().put("type", "join").put("code", pendingCode).put("name", name))
     }
 

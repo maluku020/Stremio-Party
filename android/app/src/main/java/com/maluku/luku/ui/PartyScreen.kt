@@ -33,6 +33,7 @@ fun PartyScreen(nav: Nav) {
     val party = app.party
     var name by remember { mutableStateOf(app.prefs.partyName) }
     var joinCode by remember { mutableStateOf("") }
+    var ownCode by remember { mutableStateOf("") }
     var chatText by remember { mutableStateOf("") }
 
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 30.dp)) {
@@ -54,16 +55,22 @@ fun PartyScreen(nav: Nav) {
             }
             item {
                 SectionTitle("Nieuwe party")
+                OutlinedTextField(
+                    value = ownCode, onValueChange = { v -> ownCode = v.filter { it.isLetterOrDigit() }.take(12) },
+                    label = { Text("Eigen code (mag leeg, bijv. PAPA)") }, singleLine = true, colors = lukuFieldColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
                 LukuButton(if (party.connecting) "Verbinden…" else "🎉  Party maken", modifier = Modifier.fillMaxWidth()) {
                     app.prefs.partyName = name
-                    party.create(name)
+                    party.create(name, ownCode)
                 }
             }
             item {
                 SectionTitle("Meedoen met een code")
                 OutlinedTextField(
                     value = joinCode, onValueChange = { joinCode = it.take(12) },
-                    label = { Text("Code, bijv. B4QD") }, singleLine = true, colors = lukuFieldColors(),
+                    label = { Text("Code, bijv. B4QD of PAPA") }, singleLine = true, colors = lukuFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
