@@ -6,6 +6,7 @@ const { WebSocketServer } = require('ws');
 
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_MEMBERS = 12;
+const EMPTY_ROOM_MS = Number(process.env.EMPTY_ROOM_MS) || 30 * 60 * 1000; // lege party 30 min bewaren
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 const rooms = new Map(); // code -> room
@@ -58,7 +59,11 @@ const leave = (ws) => {
     room.members.delete(member.id);
     ws.room = null;
     if (room.members.size === 0) {
-        rooms.delete(room.code);
+        // Even bewaren: valt de verbinding kort weg (scherm uit, andere app), dan kan iedereen terug in dezelfde party
+        clearTimeout(room.emptyTimer);
+        room.emptyTimer = setTimeout(() => {
+            if (room.members.size === 0 && rooms.get(room.code) === room) rooms.delete(room.code);
+        }, EMPTY_ROOM_MS);
         return;
     }
     if (room.hostId === member.id) {
@@ -75,8 +80,9 @@ const join = (ws, room, name) => {
     }
     leave(ws);
     const member = { id: ws.id, name: cleanName(name), ws };
+    clearTimeout(room.emptyTimer);
     room.members.set(member.id, member);
-    if (!room.hostId) room.hostId = member.id;
+    if (!room.hostId || !room.members.has(room.hostId)) room.hostId = member.id;
     ws.member = member;
     ws.room = room;
     send(ws, { type: 'joined', you: member.id, state: roomState(room) });
