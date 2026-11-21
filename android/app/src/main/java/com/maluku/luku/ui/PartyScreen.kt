@@ -56,7 +56,7 @@ fun PartyScreen(nav: Nav) {
             item {
                 SectionTitle("Nieuwe party")
                 OutlinedTextField(
-                    value = ownCode, onValueChange = { v -> ownCode = v.filter { it.isLetterOrDigit() }.take(12) },
+                    value = ownCode, onValueChange = { ownCode = it.take(14) },
                     label = { Text("Eigen code (mag leeg, bijv. PAPA)") }, singleLine = true, colors = lukuFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
