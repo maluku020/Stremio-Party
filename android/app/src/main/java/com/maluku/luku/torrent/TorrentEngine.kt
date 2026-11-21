@@ -212,13 +212,21 @@ class TorrentStream(
      */
     fun prioritize(pos: Long) {
         val first = pieceAt(pos)
-        val window = if (started) (32L * 1024 * 1024 / pieceLength).toInt().coerceIn(4, 80) else 2
+        if (!started) {
+            // Vóór het eerste beeld: géén deadlines (die lieten de motor hetzelfde stuk bij iedereen tegelijk
+            // opvragen), maar gewoon "dit stuk + het volgende eerst" via stukprioriteit.
+            for (i in 0 until 2) {
+                val p = first + i
+                if (p < numPieces && !handle.havePiece(p)) handle.piecePriority(p, Priority.TOP_PRIORITY)
+            }
+            return
+        }
+        // Beeld loopt: ruim vooruit, met deadlines die ver genoeg uit elkaar liggen
+        val window = (32L * 1024 * 1024 / pieceLength).toInt().coerceIn(4, 80)
         for (i in 0 until window) {
             val p = first + i
             if (p >= numPieces) break
-            if (!handle.havePiece(p)) {
-                handle.setPieceDeadline(p, if (i == 0) 0 else if (started) 1500 + i * 400 else 4000)
-            }
+            if (!handle.havePiece(p)) handle.setPieceDeadline(p, 1000 + i * 700)
         }
     }
 
@@ -316,7 +324,11 @@ class TorrentStream(
         val wait = if (w >= 0) "wacht op stuk $w (heb: ${runCatching { handle.havePiece(w) }.getOrDefault(false)})" else "niet aan het wachten"
         val t = (System.currentTimeMillis() - dbgStart) / 1000
         val first = if (dbgFirstPieceMs >= 0) "eerste stuk na ${dbgFirstPieceMs / 100 / 10.0}s" else "eerste stuk nog niet"
-        return "${t}s sinds info binnen · $first · Lezen: ${dbgReads}× · plek ${dbgPos / 1_000_000} MB van ${size / 1_000_000} MB · $wait · $dbgLast · " +
+        val extra = runCatching {
+            val st = handle.status()
+            "dubbel ${st.totalRedundantBytes() / 1_000_000} MB · fout ${st.totalFailedBytes() / 1_000_000} MB · stukken binnen ${havePieces.cardinality()} · "
+        }.getOrDefault("")
+        return "${t}s sinds info binnen · $first · $extra" + "Lezen: ${dbgReads}× · plek ${dbgPos / 1_000_000} MB van ${size / 1_000_000} MB · $wait · $dbgLast · " +
             "stuk ${pieceLength / 1024} KB, eerste stuk ${pieceAt(0)}, laatste ${pieceAt(size - 1)}"
     }
 
