@@ -58,6 +58,33 @@ fun PlayerScreen(nav: Nav, startStream: StreamItem, info: PlayInfo, race: List<S
     var stage by remember { mutableStateOf("start") }
     var nextBusy by remember { mutableStateOf(false) }
     val next = info.next
+    val party = app.party
+    // Na een opdracht van een ander: eigen veranderingen even niet terugsturen
+    val suppressUntil = remember { longArrayOf(0L) }
+    val loadedOnce = remember { booleanArrayOf(false) }
+
+    /** Opdracht van de groep uitvoeren (pauze/play/spoelen). */
+    fun applyGroup(paused: Boolean, time: Double, action: String, by: String?) {
+        if (player.duration == C.TIME_UNSET) return // video nog niet geladen; gebeurt zodra hij klaar is
+        suppressUntil[0] = System.currentTimeMillis() + 1500
+        if (player.playWhenReady == paused) player.playWhenReady = !paused
+        val diff = kotlin.math.abs(player.currentPosition / 1000.0 - time)
+        if ((action == "sync" && diff > 3) || (action != "sync" && diff > 1.5)) player.seekTo((time * 1000).toLong())
+        if (by != null) {
+            val label = when (action) { "pause" -> "heeft gepauzeerd ⏸"; "play" -> "drukte op play ▶️"; "seek" -> "heeft gespoeld ⏩"; else -> null }
+            if (label != null) party.notice = "$by $label"
+        }
+    }
+
+    fun sendOwn(action: String) {
+        if (!party.active || System.currentTimeMillis() < suppressUntil[0]) return
+        if (!party.canControl) {
+            party.groupTime()?.let { (p, t) -> applyGroup(p, t, "join", null) }
+            party.notice = "Alleen de host bedient nu"
+            return
+        }
+        party.sendPlayback(!player.playWhenReady, player.currentPosition / 1000.0, action)
+    }
 
     // Voortgang bijhouden (voor Verder kijken)
     val lastSave = remember { longArrayOf(0L, System.currentTimeMillis()) } // [laatste push-tijd, laatste meting]
@@ -93,7 +120,25 @@ fun PlayerScreen(nav: Nav, startStream: StreamItem, info: PlayInfo, race: List<S
 
     DisposableEffect(Unit) {
         val listener = object : Player.Listener {
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) sendOwn(if (playWhenReady) "play" else "pause")
+            }
+
+            override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                if (reason == Player.DISCONTINUITY_REASON_SEEK && loadedOnce[0]) sendOwn("seek")
+            }
+
             override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY && !loadedOnce[0]) {
+                    loadedOnce[0] = true
+                    // Samen kijken: meteen naar de plek van de groep, of als eerste de plek doorgeven
+                    if (party.active) {
+                        val g = party.groupTime()
+                        if (g != null) applyGroup(g.first, g.second, "join", null)
+                        else if (party.canControl) party.sendPlayback(false, player.currentPosition / 1000.0, "sync")
+                        else party.requestState()
+                    }
+                }
                 buffering = state == Player.STATE_BUFFERING || state == Player.STATE_IDLE
                 if (state == Player.STATE_ENDED) {
                     saveProgress(true)
@@ -106,7 +151,9 @@ fun PlayerScreen(nav: Nav, startStream: StreamItem, info: PlayInfo, race: List<S
             }
         }
         player.addListener(listener)
+        party.onPlayback = { p, t, a, by -> applyGroup(p, t, a, by) }
         onDispose {
+            party.onPlayback = null
             saveProgress(true)
             player.removeListener(listener)
             player.release()
@@ -160,6 +207,10 @@ fun PlayerScreen(nav: Nav, startStream: StreamItem, info: PlayInfo, race: List<S
             debug = "Fase: $stage · speler $st · ${player.currentPosition / 1000}s · info na ${app.torrents.metaSeconds}s\n" + (torrent?.debug() ?: "gewone link")
             val dur = player.duration
             showNext = next != null && dur != C.TIME_UNSET && dur > 0 && dur - player.currentPosition < 90_000
+            // Host geeft elke 5 s door waar hij is, zodat iedereen gelijk blijft lopen
+            if (party.active && party.amHost && tick % 5 == 4 && loadedOnce[0] && player.playbackState == Player.STATE_READY &&
+                System.currentTimeMillis() > suppressUntil[0]
+            ) party.sendPlayback(!player.playWhenReady, player.currentPosition / 1000.0, "sync")
             if (tick % 15 == 14) {
                 val nowT = System.currentTimeMillis()
                 val push = nowT - lastSave[0] > 60_000

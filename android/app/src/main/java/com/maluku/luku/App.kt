@@ -11,6 +11,7 @@ class App : Application() {
     lateinit var stremio: StremioRepo
     lateinit var torrents: TorrentEngine
     lateinit var library: Library
+    val party = com.maluku.luku.party.Party()
 
     override fun onCreate() {
         super.onCreate()

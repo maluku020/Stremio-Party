@@ -430,11 +430,11 @@ private fun FastestButton(list: List<StreamItem>, onRace: ((List<StreamItem>) ->
     val best = ranked.firstOrNull() ?: return
     val info = listOfNotNull(best.seeders?.let { "👤 $it" }, best.quality.ifBlank { null }, best.sizeText).joinToString(" · ")
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        LukuButton("⚡  Snelste bron  ($info)", modifier = Modifier.fillMaxWidth()) { onPick(best) }
         if (onRace != null && ranked.size >= 2) {
             val top = ranked.take(3)
-            LukuButton("🏁  Race: ${top.size} beste bronnen tegelijk, snelste wint", primary = false, modifier = Modifier.fillMaxWidth()) { onRace(top) }
+            LukuButton("🏁  Race: ${top.size} beste bronnen tegelijk, snelste wint", modifier = Modifier.fillMaxWidth()) { onRace(top) }
         }
+        LukuButton("⚡  Snelste bron  ($info)", primary = onRace == null || ranked.size < 2, modifier = Modifier.fillMaxWidth()) { onPick(best) }
     }
 }
 

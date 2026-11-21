@@ -17,6 +17,18 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
+import com.maluku.luku.party.PartyPlace
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.maluku.luku.data.CatalogDef
 import com.maluku.luku.data.PlayInfo
@@ -28,6 +40,7 @@ enum class Tab(val label: String, val icon: ImageVector) {
     DISCOVER("Ontdekken", Icons.Filled.Search),
     LIBRARY("Bibliotheek", Icons.Filled.List),
     CALENDAR("Kalender", Icons.Filled.DateRange),
+    PARTY("Samen", Icons.Filled.Person),
     SETTINGS("Instellingen", Icons.Filled.Settings),
 }
 
@@ -66,6 +79,34 @@ fun AppRoot() {
 
     BackHandler(enabled = nav.stack.size > 1) { nav.back() }
 
+    // ---- Samen kijken: navigatie delen ----
+    val party = app.party
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {
+        party.onPlace = { p ->
+            scope.launch {
+                when (p) {
+                    is PartyPlace.Detail -> openShared(nav, Screen.Detail(p.type, p.id))
+                    is PartyPlace.Streams -> openShared(nav, Screen.Streams(withEpisodes(p.info)))
+                    is PartyPlace.Player -> openShared(nav, Screen.Player(p.stream, withEpisodes(p.info), p.race))
+                }
+            }
+        }
+    }
+    val cur = nav.current
+    LaunchedEffect(cur) {
+        if (!party.active) return@LaunchedEffect
+        when (cur) {
+            is Screen.Detail -> party.sendPlace(PartyPlace.Detail(cur.type, cur.id))
+            is Screen.Streams -> party.sendPlace(PartyPlace.Streams(cur.info))
+            is Screen.Player -> party.sendPlace(PartyPlace.Player(cur.stream, cur.info, cur.race))
+            else -> {}
+        }
+    }
+    LaunchedEffect(party.notice) {
+        if (party.notice != null) { delay(4500); party.notice = null }
+    }
+
     LukuTheme {
         val screen = nav.current
         // Op een tv een rand vrijlaten, anders valt de tekst buiten beeld (overscan)
@@ -90,5 +131,35 @@ fun AppRoot() {
                 is Screen.Player -> PlayerScreen(nav, screen.stream, screen.info, screen.race)
             }
         }
+        party.notice?.let { n ->
+            Box(Modifier.fillMaxSize().padding(top = 40.dp, start = 20.dp, end = 20.dp), contentAlignment = Alignment.TopCenter) {
+                Text(
+                    "🎉 $n",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    modifier = Modifier.background(Color(0xE0241F3A), RoundedCornerShape(12.dp)).padding(horizontal = 16.dp, vertical = 10.dp),
+                )
+            }
+        }
     }
+}
+
+
+/** Iets openen dat een ander in de party koos (zonder het terug te sturen). */
+private fun openShared(nav: Nav, s: Screen) {
+    val cur = nav.current
+    // Al op dezelfde plek? Niets doen.
+    if (cur is Screen.Player && s is Screen.Player && cur.info.videoId == s.info.videoId) return
+    if (cur == s) return
+    if (cur is Screen.Player || (cur is Screen.Streams && s is Screen.Player)) nav.replace(s) else nav.go(s)
+}
+
+/** De afleveringenlijst opnieuw ophalen (zit niet in het party-bericht), zodat "volgende aflevering" werkt. */
+private suspend fun withEpisodes(info: PlayInfo): PlayInfo {
+    if (info.type != "series") return info
+    val m = kotlinx.coroutines.withTimeoutOrNull(4000) {
+        runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { App.instance.stremio.meta(info.type, info.metaId) } }.getOrNull()
+    } ?: return info
+    val eps = m.videos.filter { it.season > 0 }.ifEmpty { m.videos }.map { it.id to "${m.name} · ${it.label}" }
+    return info.copy(episodes = eps)
 }

@@ -213,9 +213,7 @@ class StremioRepo(private val prefs: Prefs) {
                 } ?: emptyList()
             }
         }.awaitAll().flatten()
-            .filter { it.lang == "nl" || it.lang == "en" }
-            .sortedBy { if (it.lang == "nl") 0 else 1 }
-            .let { list -> list.filter { it.lang == "nl" }.take(3) + list.filter { it.lang == "en" }.take(2) }
+            .let { list -> list.filter { it.lang == "nl" }.take(3) + list.filter { it.lang == "en" }.take(2) + list.filter { it.lang == "es" }.take(2) }
     }
 
     val authKey: String? get() = prefs.authKey
@@ -223,6 +221,7 @@ class StremioRepo(private val prefs: Prefs) {
     private fun normLang(l: String): String = when (l.lowercase()) {
         "dut", "nld", "nl", "dutch", "nederlands" -> "nl"
         "eng", "en", "english" -> "en"
+        "spa", "es", "spanish", "español", "espanol", "spn", "ea" -> "es"
         else -> l.lowercase()
     }
 

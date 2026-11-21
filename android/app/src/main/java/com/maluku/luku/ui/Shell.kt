@@ -55,6 +55,7 @@ private fun TabContent(nav: Nav, tab: Tab) {
         Tab.DISCOVER -> DiscoverScreen(nav)
         Tab.LIBRARY -> LibraryScreen(nav)
         Tab.CALENDAR -> CalendarScreen(nav)
+        Tab.PARTY -> PartyScreen(nav)
         Tab.SETTINGS -> SettingsScreen(nav)
     }
 }

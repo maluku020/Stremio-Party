@@ -59,7 +59,7 @@ object Players {
             MediaItem.SubtitleConfiguration.Builder(Uri.parse(s.url))
                 .setMimeType(if (s.url.endsWith(".vtt", ignoreCase = true)) MimeTypes.TEXT_VTT else MimeTypes.APPLICATION_SUBRIP)
                 .setLanguage(s.lang)
-                .setLabel((if (s.lang == "nl") "Nederlands" else "Engels") + " · " + s.addonName)
+                .setLabel(when (s.lang) { "nl" -> "Nederlands"; "es" -> "Spaans"; else -> "Engels" } + " · " + s.addonName)
                 .build()
         }
         val item = MediaItem.Builder().setUri(mainUri).setSubtitleConfigurations(subs).build()
