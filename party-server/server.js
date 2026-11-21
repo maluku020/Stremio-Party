@@ -105,6 +105,12 @@ const handle = (ws, msg) => {
                     send(ws, { type: 'error', text: 'Eigen code moet 3 tot 12 letters of cijfers zijn' });
                     return;
                 }
+                // Een lege party met deze code (iedereen is weg) mag je gewoon opnieuw gebruiken
+                const old = rooms.get(own);
+                if (old && old.members.size === 0) {
+                    clearTimeout(old.emptyTimer);
+                    rooms.delete(own);
+                }
                 if (rooms.has(own) || rooms.has('MLK-' + own)) {
                     send(ws, { type: 'error', text: 'Deze code is al in gebruik. Kies een andere.' });
                     return;
