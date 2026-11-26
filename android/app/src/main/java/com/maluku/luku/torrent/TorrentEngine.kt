@@ -23,6 +23,7 @@ import java.net.URLEncoder
  * met voorrang voor het stuk dat de speler nu nodig heeft.
  */
 class TorrentEngine(ctx: Context) {
+    private val isTv = ctx.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
 
     val dir: File = File(ctx.cacheDir, "torrents")
     private var session: SessionManager? = null
@@ -41,7 +42,7 @@ class TorrentEngine(ctx: Context) {
         // Instellingen voor snel streamen (standaard is libtorrent voorzichtig)
         val sp = SettingsPack()
         runCatching {
-            sp.connectionsLimit(300)
+            sp.connectionsLimit(if (isTv) 150 else 300)
             // DHT-"adresboek": hiermee vindt de motor andere delers (anders vaak maar een paar)
             sp.setBoolean(settings_pack.bool_types.enable_dht.swigValue(), true)
             sp.setBoolean(settings_pack.bool_types.enable_lsd.swigValue(), true)

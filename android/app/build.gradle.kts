@@ -33,7 +33,9 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Code verkleinen en optimaliseren: maakt de app merkbaar sneller (vooral op de Chromecast)
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("luku")
         }
         debug {
@@ -80,6 +82,8 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
+    // Installeert de voorgecompileerde "snelle paden" van Compose ook als de app niet uit de Play Store komt
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 
     // Torrent-motor
     implementation("org.libtorrent4j:libtorrent4j:2.1.0-39")
