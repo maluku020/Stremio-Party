@@ -254,9 +254,23 @@ fun PlayerScreen(nav: Nav, startStream: StreamItem, info: PlayInfo, race: List<S
                     useController = true
                     setShowSubtitleButton(true)
                     keepScreenOn = true
-                    requestFocus()
+                    isFocusable = true
+                    isFocusableInTouchMode = true
+                    controllerShowTimeoutMs = 4000
+                    // Afstandsbediening: elke knop laat eerst de bediening zien
+                    setOnKeyListener { v, keyCode, event ->
+                        val pv = v as PlayerView
+                        if (event.action == android.view.KeyEvent.ACTION_DOWN && !pv.isControllerFullyVisible &&
+                            keyCode != android.view.KeyEvent.KEYCODE_BACK
+                        ) {
+                            pv.showController()
+                            true
+                        } else false
+                    }
+                    post { requestFocus() }
                 }
             },
+            update = { pv -> if (!pv.hasFocus()) pv.post { pv.requestFocus() } },
             modifier = Modifier.fillMaxSize(),
         )
 
