@@ -245,6 +245,12 @@ fun PlayerScreen(nav: Nav, startStream: StreamItem, info: PlayInfo, race: List<S
         }
     }
 
+    val playerViewRef = remember { arrayOfNulls<PlayerView>(1) }
+    DisposableEffect(Unit) {
+        com.maluku.luku.MainActivity.playerKeys = { e -> handleRemote(e, player, playerViewRef[0]) }
+        onDispose { com.maluku.luku.MainActivity.playerKeys = null }
+    }
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             factory = { c ->
@@ -257,20 +263,10 @@ fun PlayerScreen(nav: Nav, startStream: StreamItem, info: PlayInfo, race: List<S
                     isFocusable = true
                     isFocusableInTouchMode = true
                     controllerShowTimeoutMs = 4000
-                    // Afstandsbediening: elke knop laat eerst de bediening zien
-                    setOnKeyListener { v, keyCode, event ->
-                        val pv = v as PlayerView
-                        if (event.action == android.view.KeyEvent.ACTION_DOWN && !pv.isControllerFullyVisible &&
-                            keyCode != android.view.KeyEvent.KEYCODE_BACK
-                        ) {
-                            pv.showController()
-                            true
-                        } else false
-                    }
+                    playerViewRef[0] = this
                     post { requestFocus() }
                 }
             },
-            update = { pv -> if (!pv.hasFocus()) pv.post { pv.requestFocus() } },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -361,3 +357,65 @@ private suspend fun downloadSubs(ctx: android.content.Context, list: List<Subtit
             }
         }.map { it.await() }.filterNotNull()
     }
+
+
+/**
+ * Knoppen van de afstandsbediening tijdens een video.
+ * - Bediening verborgen: OK = pauze/play, links/rechts = 10 s terug/verder, omhoog/omlaag = bediening tonen.
+ * - Bediening zichtbaar: je kunt met de pijltjes door de knoppen (ook ondertitels ⚙/CC) en met OK kiezen.
+ * - Terug: eerst de bediening verbergen, daarna pas het scherm sluiten.
+ */
+private fun handleRemote(e: android.view.KeyEvent, player: androidx.media3.common.Player, pv: PlayerView?): Boolean {
+    pv ?: return false
+
+    val code = e.keyCode
+    val down = e.action == android.view.KeyEvent.ACTION_DOWN
+    // Mediaknoppen werken altijd
+    when (code) {
+        android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, android.view.KeyEvent.KEYCODE_HEADSETHOOK -> {
+            if (down) { player.playWhenReady = !player.playWhenReady; pv.showController() }
+            return true
+        }
+        android.view.KeyEvent.KEYCODE_MEDIA_PLAY -> { if (down) player.playWhenReady = true; return true }
+        android.view.KeyEvent.KEYCODE_MEDIA_PAUSE -> { if (down) { player.playWhenReady = false; pv.showController() }; return true }
+        android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { if (down) player.seekTo(player.currentPosition + 10_000); return true }
+        android.view.KeyEvent.KEYCODE_MEDIA_REWIND -> { if (down) player.seekTo(maxOf(0, player.currentPosition - 10_000)); return true }
+    }
+    val visible = pv.isControllerFullyVisible
+    if (code == android.view.KeyEvent.KEYCODE_BACK) {
+        if (visible) { if (down) pv.hideController(); return true }
+        return false
+    }
+    val isDpad = code in listOf(
+        android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER, android.view.KeyEvent.KEYCODE_NUMPAD_ENTER,
+        android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent.KEYCODE_DPAD_RIGHT,
+        android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+    )
+    if (!isDpad) return false
+    if (!visible) {
+        if (!down) return true
+        when (code) {
+            android.view.KeyEvent.KEYCODE_DPAD_LEFT -> player.seekTo(maxOf(0, player.currentPosition - 10_000))
+            android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> player.seekTo(player.currentPosition + 10_000)
+            android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {}
+            else -> player.playWhenReady = !player.playWhenReady
+        }
+        pv.showController()
+        focusController(pv)
+        return true
+    }
+    // Bediening zichtbaar: zorg dat een knop in de bediening de focus heeft, dan doet Android de rest
+    pv.showController() // timer opnieuw starten
+    if (pv.findFocus() == null || pv.findFocus() === pv) {
+        if (down) focusController(pv)
+        return true
+    }
+    return false // normale Android-bediening (focus zit al in de knoppen)
+}
+
+private fun focusController(pv: PlayerView) {
+    pv.post {
+        val btn = pv.findViewById<android.view.View>(androidx.media3.ui.R.id.exo_play_pause)
+        btn?.requestFocus()
+    }
+}

@@ -13,6 +13,16 @@ class MainActivity : ComponentActivity() {
         setContent { AppRoot() }
     }
 
+    /** Afstandsbediening tijdens een video: eerst naar de speler (anders blijft hij in het menu erachter hangen). */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        playerKeys?.let { if (it(event)) return true }
+        return super.dispatchKeyEvent(event)
+    }
+
+    companion object {
+        var playerKeys: ((android.view.KeyEvent) -> Boolean)? = null
+    }
+
     override fun onDestroy() {
         if (isFinishing) App.instance.torrents.stop()
         super.onDestroy()
