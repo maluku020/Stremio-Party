@@ -29,6 +29,8 @@ object Players {
             .build()
         val player = ExoPlayer.Builder(ctx, renderers)
             .setLoadControl(load)
+            .setSeekBackIncrementMs(10_000)
+            .setSeekForwardIncrementMs(10_000)
             .build()
         // Ondertitels: Nederlands heeft voorrang
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
